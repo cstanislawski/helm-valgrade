@@ -1,0 +1,11 @@
+name: "valgrade"
+version: "1.0.0"
+usage: "Upgrade Helm values while preserving custom changes"
+description: |-
+  This plugin helps upgrade Helm chart values files by carrying over
+  changes made to the base values file to the new version of the values file.
+ignoreFlags: false
+command: "$HELM_PLUGIN_DIR/bin/helm-valgrade"
+hooks:
+  install: "go build -o bin/helm-valgrade main.go"
+  update: "go build -o bin/helm-valgrade main.go"
