@@ -133,7 +133,6 @@ func compareMap(name string, got, expected map[string]interface{}) string {
 		details += fmt.Sprintf("  Got:      %#v\n", got)
 		details += fmt.Sprintf("  Expected: %#v\n", expected)
 
-		// Check for missing or extra keys
 		for k := range got {
 			if _, exists := expected[k]; !exists {
 				details += fmt.Sprintf("  Extra key in got: %s\n", k)
@@ -145,7 +144,6 @@ func compareMap(name string, got, expected map[string]interface{}) string {
 			}
 		}
 
-		// Check for value mismatches
 		for k, v := range got {
 			if expectedV, exists := expected[k]; exists {
 				if !reflect.DeepEqual(v, expectedV) {

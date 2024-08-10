@@ -20,7 +20,6 @@ type Chart struct {
 func Fetch(repository, name, version string, actionConfig *action.Configuration) (*Chart, error) {
 	settings := cli.New()
 
-	// Create a chart downloader
 	client := action.NewInstall(actionConfig)
 	client.ChartPathOptions.RepoURL = repository
 	client.ChartPathOptions.Version = version
@@ -34,13 +33,11 @@ func Fetch(repository, name, version string, actionConfig *action.Configuration)
 		RepositoryCache:  settings.RepositoryCache,
 	}
 
-	// Download the chart
 	filename, _, err := chartDownloader.DownloadTo(fmt.Sprintf("%s/%s", repository, name), version, settings.RepositoryCache)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download chart: %w", err)
 	}
 
-	// Load the downloaded chart
 	loadedChart, err := loader.Load(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load chart: %w", err)
@@ -69,7 +66,6 @@ func UpdateRepository(name, url string, settings *cli.EnvSettings) error {
 	repoFile, err := repo.LoadFile(settings.RepositoryConfig)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// If the file doesn't exist, create a new one
 			repoFile = repo.NewFile()
 		} else {
 			return fmt.Errorf("failed to load repository file: %w", err)
