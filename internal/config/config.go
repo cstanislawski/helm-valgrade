@@ -67,7 +67,7 @@ func Parse() (*Config, error) {
 	}
 
 	if err := cfg.validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	return cfg, nil
@@ -88,6 +88,12 @@ func (cfg *Config) validate() error {
 	}
 	if cfg.InPlace && cfg.OutputFile != "" {
 		return fmt.Errorf("in-place and output-file cannot be used together")
+	}
+	if cfg.Repository == "" {
+		return fmt.Errorf("repository is required")
+	}
+	if cfg.ChartName == "" {
+		return fmt.Errorf("chart name is required")
 	}
 	return nil
 }

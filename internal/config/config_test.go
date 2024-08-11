@@ -18,6 +18,8 @@ func TestParse_ValidInput(t *testing.T) {
 		"--version-target=2.0.0",
 		"--values=test.yaml",
 		"--output-file=result.yaml",
+		"--repository=https://charts.example.com",
+		"--chart=mychart",
 	}
 
 	cfg, err := Parse()
@@ -40,6 +42,14 @@ func TestParse_ValidInput(t *testing.T) {
 	if cfg.OutputFile != "result.yaml" {
 		t.Errorf("Expected output file 'result.yaml', got '%s'", cfg.OutputFile)
 	}
+
+	if cfg.Repository != "https://charts.example.com" {
+		t.Errorf("Expected repository 'https://charts.example.com', got '%s'", cfg.Repository)
+	}
+
+	if cfg.ChartName != "mychart" {
+		t.Errorf("Expected chart name 'mychart', got '%s'", cfg.ChartName)
+	}
 }
 
 func TestParse_InPlaceFlag(t *testing.T) {
@@ -50,6 +60,8 @@ func TestParse_InPlaceFlag(t *testing.T) {
 		"--version-target=2.0.0",
 		"--values=test.yaml",
 		"--in-place",
+		"--repository=https://charts.example.com",
+		"--chart=mychart",
 	}
 
 	cfg, err := Parse()
@@ -72,6 +84,8 @@ func TestParse_MissingRequiredFlags(t *testing.T) {
 		"cmd",
 		"--version-base=1.0.0",
 		"--values=test.yaml",
+		"--repository=https://charts.example.com",
+		"--chart=mychart",
 	}
 
 	_, err := Parse()
@@ -79,7 +93,7 @@ func TestParse_MissingRequiredFlags(t *testing.T) {
 		t.Fatal("Expected error, got nil")
 	}
 
-	expectedError := "version-target is required"
+	expectedError := "invalid configuration: version-target is required"
 	if err.Error() != expectedError {
 		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
 	}
@@ -94,6 +108,8 @@ func TestParse_InPlaceAndOutputFileTogether(t *testing.T) {
 		"--values=test.yaml",
 		"--in-place",
 		"--output-file=result.yaml",
+		"--repository=https://charts.example.com",
+		"--chart=mychart",
 	}
 
 	_, err := Parse()
@@ -101,7 +117,7 @@ func TestParse_InPlaceAndOutputFileTogether(t *testing.T) {
 		t.Fatal("Expected error, got nil")
 	}
 
-	expectedError := "in-place and output-file cannot be used together"
+	expectedError := "invalid configuration: in-place and output-file cannot be used together"
 	if err.Error() != expectedError {
 		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
 	}
@@ -116,6 +132,8 @@ func TestParse_KeepValues(t *testing.T) {
 		"--values=test.yaml",
 		"--output-file=result.yaml",
 		"--keep=foo,bar",
+		"--repository=https://charts.example.com",
+		"--chart=mychart",
 	}
 
 	cfg, err := Parse()
@@ -139,6 +157,8 @@ func TestParse_DefaultLogLevel(t *testing.T) {
 		"--version-target=2.0.0",
 		"--values=test.yaml",
 		"--output-file=result.yaml",
+		"--repository=https://charts.example.com",
+		"--chart=mychart",
 	}
 
 	cfg, err := Parse()
@@ -160,6 +180,8 @@ func TestParse_CustomLogLevel(t *testing.T) {
 		"--values=test.yaml",
 		"--output-file=result.yaml",
 		"--log-level=debug",
+		"--repository=https://charts.example.com",
+		"--chart=mychart",
 	}
 
 	cfg, err := Parse()

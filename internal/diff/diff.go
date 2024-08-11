@@ -28,15 +28,7 @@ func Compare(base, target *chart.Chart, userValues map[string]interface{}, keepV
 		return nil, fmt.Errorf("failed to compare values: %w", err)
 	}
 
-	if len(result.Added) == 0 {
-		result.Added = nil
-	}
-	if len(result.Removed) == 0 {
-		result.Removed = nil
-	}
-	if len(result.Modified) == 0 {
-		result.Modified = nil
-	}
+	cleanupEmptyMaps(result)
 
 	return result, nil
 }
@@ -72,16 +64,9 @@ func compareValues(prefix string, base, target, user map[string]interface{}, kee
 
 		switch typedV := v.(type) {
 		case map[string]interface{}:
-			if userExists {
-				err := compareValues(path, baseVal.(map[string]interface{}), typedV, userVal.(map[string]interface{}), keepValues, ignoreMissing, result)
-				if err != nil {
-					return err
-				}
-			} else {
-				err := compareValues(path, baseVal.(map[string]interface{}), typedV, nil, keepValues, ignoreMissing, result)
-				if err != nil {
-					return err
-				}
+			err := compareValues(path, baseVal.(map[string]interface{}), typedV, getUserSubMap(user, k), keepValues, ignoreMissing, result)
+			if err != nil {
+				return err
 			}
 		default:
 			if !reflect.DeepEqual(v, baseVal) {
@@ -94,20 +79,30 @@ func compareValues(prefix string, base, target, user map[string]interface{}, kee
 		}
 	}
 
-	for k, v := range base {
-		path := joinPath(prefix, k)
+	if !ignoreMissing {
+		for k, v := range base {
+			path := joinPath(prefix, k)
 
-		if shouldKeep(path, keepValues) {
-			continue
-		}
+			if shouldKeep(path, keepValues) {
+				continue
+			}
 
-		if _, exists := target[k]; !exists {
-			if !ignoreMissing {
+			if _, exists := target[k]; !exists {
 				result.Removed[path] = v
 			}
 		}
 	}
 
+	return nil
+}
+
+func getUserSubMap(user map[string]interface{}, key string) map[string]interface{} {
+	if user == nil {
+		return nil
+	}
+	if subMap, ok := user[key].(map[string]interface{}); ok {
+		return subMap
+	}
 	return nil
 }
 
@@ -125,4 +120,16 @@ func shouldKeep(path string, keepValues []string) bool {
 		}
 	}
 	return false
+}
+
+func cleanupEmptyMaps(result *Result) {
+	if len(result.Added) == 0 {
+		result.Added = nil
+	}
+	if len(result.Removed) == 0 {
+		result.Removed = nil
+	}
+	if len(result.Modified) == 0 {
+		result.Modified = nil
+	}
 }

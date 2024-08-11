@@ -73,6 +73,27 @@ func TestCompare(t *testing.T) {
 			user:     map[string]interface{}{"a": 3},
 			expected: Result{Modified: map[string]interface{}{"a": 3}},
 		},
+		{
+			name:   "Complex nested changes with ignore missing",
+			base:   map[string]interface{}{"a": map[string]interface{}{"b": 1, "c": 2, "d": 3}, "e": 4},
+			target: map[string]interface{}{"a": map[string]interface{}{"b": 1, "c": 3, "f": 5}, "g": 6},
+			user:   map[string]interface{}{"a": map[string]interface{}{"c": 4}},
+			expected: Result{
+				Added:    map[string]interface{}{"a.f": 5, "g": 6},
+				Modified: map[string]interface{}{"a.c": 4},
+			},
+			ignoreMissing: true,
+		},
+		{
+			name:       "Keep nested values",
+			base:       map[string]interface{}{"a": map[string]interface{}{"b": 1, "c": 2}, "d": 3},
+			target:     map[string]interface{}{"a": map[string]interface{}{"b": 2, "c": 3}, "d": 4},
+			user:       map[string]interface{}{},
+			keepValues: []string{"a.b"},
+			expected: Result{
+				Modified: map[string]interface{}{"a.c": 3, "d": 4},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -88,8 +109,6 @@ func TestCompare(t *testing.T) {
 			if !resultEqual(*result, tt.expected) {
 				t.Errorf("Compare result mismatch for test case %s.\nExpected: %+v\nGot: %+v\nDetailed comparison:\n%s",
 					tt.name, tt.expected, *result, detailedComparison(*result, tt.expected))
-			} else {
-				t.Logf("Test case %s passed. Result: %+v", tt.name, *result)
 			}
 		})
 	}
@@ -121,7 +140,7 @@ func detailedComparison(got, expected Result) string {
 func compareMap(name string, got, expected map[string]interface{}) string {
 	var details string
 
-	if (got == nil && expected != nil) || (got != nil && expected == nil) {
+	if (got == nil) != (expected == nil) {
 		details += fmt.Sprintf("%s map nil mismatch:\n", name)
 		details += fmt.Sprintf("  Got is nil: %v\n", got == nil)
 		details += fmt.Sprintf("  Expected is nil: %v\n", expected == nil)
@@ -148,14 +167,9 @@ func compareMap(name string, got, expected map[string]interface{}) string {
 			if expectedV, exists := expected[k]; exists {
 				if !reflect.DeepEqual(v, expectedV) {
 					details += fmt.Sprintf("  Value mismatch for key %s:\n    Got:      %#v\n    Expected: %#v\n", k, v, expectedV)
-				} else {
-					details += fmt.Sprintf("  Value match for key %s:\n    Both:     %#v\n", k, v)
 				}
 			}
 		}
-	} else {
-		details += fmt.Sprintf("%s map match:\n", name)
-		details += fmt.Sprintf("  Both:     %#v\n", got)
 	}
 
 	return details
@@ -172,6 +186,9 @@ func TestShouldKeep(t *testing.T) {
 		{"a.b.c", []string{"a.b"}, true},
 		{"a.b", []string{"a.c"}, false},
 		{"a", []string{"b"}, false},
+		{"a.b.c", []string{"a.b.c"}, true},
+		{"a.b.c.d", []string{"a.b.c"}, true},
+		{"a.b", []string{"a.b.c"}, false},
 	}
 
 	for _, tt := range tests {
@@ -193,10 +210,12 @@ func TestJoinPath(t *testing.T) {
 		{"", "a", "a"},
 		{"a", "b", "a.b"},
 		{"a.b", "c", "a.b.c"},
+		{"", "", ""},
+		{"a.b.c", "", "a.b.c."},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s+%s", tt.prefix, tt.key), func(t *testing.T) {
 			result := joinPath(tt.prefix, tt.key)
 			if result != tt.expected {
 				t.Errorf("joinPath(%q, %q) = %q, want %q", tt.prefix, tt.key, result, tt.expected)
