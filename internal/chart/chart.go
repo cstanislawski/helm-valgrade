@@ -3,6 +3,7 @@ package chart
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -33,7 +34,8 @@ func Fetch(repository, name, version string, actionConfig *action.Configuration)
 		RepositoryCache:  settings.RepositoryCache,
 	}
 
-	filename, _, err := chartDownloader.DownloadTo(fmt.Sprintf("%s/%s", repository, name), version, settings.RepositoryCache)
+	chartURL := fmt.Sprintf("%s/%s", strings.TrimSuffix(repository, "/"), strings.ReplaceAll(name, " ", "-"))
+	filename, _, err := chartDownloader.DownloadTo(chartURL, version, settings.RepositoryCache)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download chart: %w", err)
 	}
