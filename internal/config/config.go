@@ -1,8 +1,8 @@
 package config
 
 import (
+	"flag"
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -27,84 +27,45 @@ func Parse() (*Config, error) {
 		LogLevel: "info",
 	}
 
-	args := os.Args[1:]
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch arg {
-		case "-h", "--help":
-			cfg.Help = true
-			return cfg, nil
-		case "-b", "--version-base":
-			if i+1 < len(args) {
-				cfg.VersionBase = args[i+1]
-				i++
-			}
-		case "-t", "--version-target":
-			if i+1 < len(args) {
-				cfg.VersionTarget = args[i+1]
-				i++
-			}
-		case "-f", "--values":
-			if i+1 < len(args) {
-				cfg.ValuesFile = args[i+1]
-				i++
-			}
-		case "-o", "--output-file":
-			if i+1 < len(args) {
-				cfg.OutputFile = args[i+1]
-				i++
-			}
-		case "-i", "--in-place":
-			cfg.InPlace = true
-		case "-r", "--repository":
-			if i+1 < len(args) {
-				cfg.Repository = args[i+1]
-				i++
-			}
-		case "-c", "--chart":
-			if i+1 < len(args) {
-				chartNameParts := []string{args[i+1]}
-				for j := i + 2; j < len(args); j++ {
-					if strings.HasPrefix(args[j], "-") {
-						break
-					}
-					chartNameParts = append(chartNameParts, args[j])
-					i = j
-				}
-				cfg.ChartName = strings.Join(chartNameParts, " ")
-			}
-		case "-k", "--keep":
-			if i+1 < len(args) {
-				cfg.KeepValues = append(cfg.KeepValues, strings.Split(args[i+1], ",")...)
-				i++
-			}
-		case "-s", "--silent":
-			cfg.Silent = true
-		case "-l", "--log-level":
-			if i+1 < len(args) {
-				cfg.LogLevel = args[i+1]
-				i++
-			}
-		case "-d", "--dry-run":
-			cfg.DryRun = true
-		case "--ignore-missing":
-			cfg.IgnoreMissing = true
-		}
-	}
+	flag.Usage = PrintHelp
 
-	if err := cfg.validate(); err != nil {
-		return nil, err
-	}
+	flag.StringVar(&cfg.VersionBase, "version-base", "", "")
+	flag.StringVar(&cfg.VersionBase, "b", "", "")
+	flag.StringVar(&cfg.VersionTarget, "version-target", "", "")
+	flag.StringVar(&cfg.VersionTarget, "t", "", "")
+	flag.StringVar(&cfg.ValuesFile, "values", "", "")
+	flag.StringVar(&cfg.ValuesFile, "f", "", "")
+	flag.StringVar(&cfg.OutputFile, "output-file", "", "")
+	flag.StringVar(&cfg.OutputFile, "o", "", "")
+	flag.BoolVar(&cfg.InPlace, "in-place", false, "")
+	flag.BoolVar(&cfg.InPlace, "i", false, "")
+	flag.StringVar(&cfg.Repository, "repository", "", "")
+	flag.StringVar(&cfg.Repository, "r", "", "")
+	flag.StringVar(&cfg.ChartName, "chart", "", "")
+	flag.StringVar(&cfg.ChartName, "c", "", "")
+	flag.Var((*stringSliceFlag)(&cfg.KeepValues), "keep", "")
+	flag.Var((*stringSliceFlag)(&cfg.KeepValues), "k", "")
+	flag.BoolVar(&cfg.Silent, "silent", false, "")
+	flag.BoolVar(&cfg.Silent, "s", false, "")
+	flag.StringVar(&cfg.LogLevel, "log-level", "info", "")
+	flag.StringVar(&cfg.LogLevel, "l", "info", "")
+	flag.BoolVar(&cfg.DryRun, "dry-run", false, "")
+	flag.BoolVar(&cfg.DryRun, "d", false, "")
+	flag.BoolVar(&cfg.IgnoreMissing, "ignore-missing", false, "")
+	flag.BoolVar(&cfg.Help, "help", false, "")
+	flag.BoolVar(&cfg.Help, "h", false, "")
 
-	return cfg, nil
+	flag.Parse()
+
+	return cfg, cfg.validate()
 }
 
 func (cfg *Config) validate() error {
+	var errors []string
+
 	if cfg.Help {
 		return nil
 	}
-
-	var errors []string
 
 	if cfg.VersionBase == "" {
 		errors = append(errors, "version-base is required (use -b or --version-base)")
@@ -118,6 +79,9 @@ func (cfg *Config) validate() error {
 	if !cfg.InPlace && cfg.OutputFile == "" {
 		errors = append(errors, "either in-place (-i) or output-file (-o) must be specified")
 	}
+	if cfg.InPlace && cfg.OutputFile != "" {
+		return fmt.Errorf("in-place and output-file cannot be used together")
+	}
 	if cfg.Repository == "" {
 		errors = append(errors, "repository is required (use -r or --repository)")
 	}
@@ -126,9 +90,20 @@ func (cfg *Config) validate() error {
 	}
 
 	if len(errors) > 0 {
-		return fmt.Errorf("invalid configuration:\n- %s", strings.Join(errors, "\n- "))
+		return fmt.Errorf("invalid configuration: %s", errors[0])
 	}
 
+	return nil
+}
+
+type stringSliceFlag []string
+
+func (s *stringSliceFlag) String() string {
+	return strings.Join(*s, ",")
+}
+
+func (s *stringSliceFlag) Set(value string) error {
+	*s = append(*s, strings.Split(value, ",")...)
 	return nil
 }
 

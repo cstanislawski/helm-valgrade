@@ -93,7 +93,7 @@ func TestParse_MissingRequiredFlags(t *testing.T) {
 		t.Fatal("Expected error, got nil")
 	}
 
-	expectedError := "invalid configuration: version-target is required"
+	expectedError := "invalid configuration: version-target is required (use -t or --version-target)"
 	if err.Error() != expectedError {
 		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
 	}
@@ -117,7 +117,7 @@ func TestParse_InPlaceAndOutputFileTogether(t *testing.T) {
 		t.Fatal("Expected error, got nil")
 	}
 
-	expectedError := "invalid configuration: in-place and output-file cannot be used together"
+	expectedError := "in-place and output-file cannot be used together"
 	if err.Error() != expectedError {
 		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
 	}
