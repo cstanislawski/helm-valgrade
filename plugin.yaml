@@ -1,6 +1,6 @@
 name: "valgrade"
 version: "1.0.0"
-usage: "Upgrade Helm values while preserving custom changes"
+usage: "upgrade values while preserving custom changes"
 description: |-
   This plugin helps upgrade Helm chart values files by carrying over
   changes made to the base values file to the new version of the values file.
