@@ -1,8 +1,8 @@
 package config
 
 import (
-	"flag"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -19,81 +19,133 @@ type Config struct {
 	LogLevel      string
 	DryRun        bool
 	IgnoreMissing bool
+	Help          bool
 }
 
 func Parse() (*Config, error) {
-	cfg := &Config{}
+	cfg := &Config{
+		LogLevel: "info",
+	}
 
-	flag.StringVar(&cfg.VersionBase, "version-base", "", "The version of the chart you are upgrading from")
-	flag.StringVar(&cfg.VersionBase, "b", "", "The version of the chart you are upgrading from (shorthand)")
-
-	flag.StringVar(&cfg.VersionTarget, "version-target", "", "The version of the chart you are upgrading to")
-	flag.StringVar(&cfg.VersionTarget, "t", "", "The version of the chart you are upgrading to (shorthand)")
-
-	flag.StringVar(&cfg.ValuesFile, "values", "", "The path to the values file you are using")
-	flag.StringVar(&cfg.ValuesFile, "f", "", "The path to the values file you are using (shorthand)")
-
-	flag.StringVar(&cfg.OutputFile, "output-file", "", "The path to the output file")
-	flag.StringVar(&cfg.OutputFile, "o", "", "The path to the output file (shorthand)")
-
-	flag.BoolVar(&cfg.InPlace, "in-place", false, "Update the values file in place")
-	flag.BoolVar(&cfg.InPlace, "i", false, "Update the values file in place (shorthand)")
-
-	flag.StringVar(&cfg.Repository, "repository", "", "The repository where the chart is located")
-	flag.StringVar(&cfg.Repository, "r", "", "The repository where the chart is located (shorthand)")
-
-	flag.StringVar(&cfg.ChartName, "chart", "", "The name of the chart")
-	flag.StringVar(&cfg.ChartName, "c", "", "The name of the chart (shorthand)")
-
-	var keepValues string
-	flag.StringVar(&keepValues, "keep", "", "Exclude specific values from the upgrade process (comma-separated)")
-	flag.StringVar(&keepValues, "k", "", "Exclude specific values from the upgrade process (comma-separated) (shorthand)")
-
-	flag.BoolVar(&cfg.Silent, "silent", false, "Suppress all output")
-	flag.BoolVar(&cfg.Silent, "s", false, "Suppress all output (shorthand)")
-
-	flag.StringVar(&cfg.LogLevel, "log-level", "info", "Set the log level (debug, info, warn, error, fatal)")
-	flag.StringVar(&cfg.LogLevel, "l", "info", "Set the log level (debug, info, warn, error, fatal) (shorthand)")
-
-	flag.BoolVar(&cfg.DryRun, "dry-run", false, "Print the result without writing to the output file")
-	flag.BoolVar(&cfg.DryRun, "d", false, "Print the result without writing to the output file (shorthand)")
-
-	flag.BoolVar(&cfg.IgnoreMissing, "ignore-missing", false, "Ignore missing values in the old chart version")
-
-	flag.Parse()
-
-	if keepValues != "" {
-		cfg.KeepValues = strings.Split(keepValues, ",")
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "-h", "--help":
+			cfg.Help = true
+			return cfg, nil
+		case "-b", "--version-base":
+			if i+1 < len(args) {
+				cfg.VersionBase = args[i+1]
+				i++
+			}
+		case "-t", "--version-target":
+			if i+1 < len(args) {
+				cfg.VersionTarget = args[i+1]
+				i++
+			}
+		case "-f", "--values":
+			if i+1 < len(args) {
+				cfg.ValuesFile = args[i+1]
+				i++
+			}
+		case "-o", "--output-file":
+			if i+1 < len(args) {
+				cfg.OutputFile = args[i+1]
+				i++
+			}
+		case "-i", "--in-place":
+			cfg.InPlace = true
+		case "-r", "--repository":
+			if i+1 < len(args) {
+				cfg.Repository = args[i+1]
+				i++
+			}
+		case "-c", "--chart":
+			if i+1 < len(args) {
+				chartNameParts := []string{args[i+1]}
+				for j := i + 2; j < len(args); j++ {
+					if strings.HasPrefix(args[j], "-") {
+						break
+					}
+					chartNameParts = append(chartNameParts, args[j])
+					i = j
+				}
+				cfg.ChartName = strings.Join(chartNameParts, " ")
+			}
+		case "-k", "--keep":
+			if i+1 < len(args) {
+				cfg.KeepValues = append(cfg.KeepValues, strings.Split(args[i+1], ",")...)
+				i++
+			}
+		case "-s", "--silent":
+			cfg.Silent = true
+		case "-l", "--log-level":
+			if i+1 < len(args) {
+				cfg.LogLevel = args[i+1]
+				i++
+			}
+		case "-d", "--dry-run":
+			cfg.DryRun = true
+		case "--ignore-missing":
+			cfg.IgnoreMissing = true
+		}
 	}
 
 	if err := cfg.validate(); err != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
+		return nil, err
 	}
 
 	return cfg, nil
 }
 
 func (cfg *Config) validate() error {
+	if cfg.Help {
+		return nil
+	}
+
+	var errors []string
+
 	if cfg.VersionBase == "" {
-		return fmt.Errorf("version-base is required")
+		errors = append(errors, "version-base is required (use -b or --version-base)")
 	}
 	if cfg.VersionTarget == "" {
-		return fmt.Errorf("version-target is required")
+		errors = append(errors, "version-target is required (use -t or --version-target)")
 	}
 	if cfg.ValuesFile == "" {
-		return fmt.Errorf("values file is required")
+		errors = append(errors, "values file is required (use -f or --values)")
 	}
 	if !cfg.InPlace && cfg.OutputFile == "" {
-		return fmt.Errorf("either in-place or output-file must be specified")
-	}
-	if cfg.InPlace && cfg.OutputFile != "" {
-		return fmt.Errorf("in-place and output-file cannot be used together")
+		errors = append(errors, "either in-place (-i) or output-file (-o) must be specified")
 	}
 	if cfg.Repository == "" {
-		return fmt.Errorf("repository is required")
+		errors = append(errors, "repository is required (use -r or --repository)")
 	}
 	if cfg.ChartName == "" {
-		return fmt.Errorf("chart name is required")
+		errors = append(errors, "chart name is required (use -c or --chart)")
 	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("invalid configuration:\n- %s", strings.Join(errors, "\n- "))
+	}
+
 	return nil
+}
+
+func PrintHelp() {
+	fmt.Println("Usage: helm valgrade [flags]")
+	fmt.Println("\nFlags:")
+	fmt.Println("  -b, --version-base string    The version of the chart you are upgrading from")
+	fmt.Println("  -t, --version-target string  The version of the chart you are upgrading to")
+	fmt.Println("  -f, --values string          The path to the values file you are using")
+	fmt.Println("  -o, --output-file string     The path to the output file")
+	fmt.Println("  -i, --in-place               Update the values file in place")
+	fmt.Println("  -r, --repository string      The repository where the chart is located")
+	fmt.Println("  -c, --chart string           The name of the chart")
+	fmt.Println("  -k, --keep string            Exclude specific values from the upgrade process (comma-separated)")
+	fmt.Println("  -s, --silent                 Suppress all output")
+	fmt.Println("  -l, --log-level string       Set the log level (debug, info, warn, error, fatal) (default \"info\")")
+	fmt.Println("  -d, --dry-run                Print the result without writing to the output file")
+	fmt.Println("      --ignore-missing         Ignore missing values in the old chart version")
+	fmt.Println("  -h, --help                   Display this help message")
 }

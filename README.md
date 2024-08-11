@@ -32,6 +32,7 @@ helm plugin install https://github.com/cstanislawski/helm-valgrade
 - `--log-level` / `-l` - set the log level (debug, info, warn, error, fatal). default: info
 - `--dry-run` / `-d` - print the result without writing to the output file
 - `--ignore-missing` - ignore missing values in the old chart version. does not apply to user-specified changes
+- `--help` / `-h` - display the help message
 
 ## TODO
 
