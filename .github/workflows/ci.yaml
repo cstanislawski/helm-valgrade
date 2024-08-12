@@ -10,52 +10,48 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
-      - name: setup-go
-        uses: actions/setup-go@v4
+      - uses: actions/setup-go@v4
         with:
           go-version: "1.22.6"
-
-      - name: install-deps
-        run: make deps
-
-      - name: run-tests
-        run: make test
+      - uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - run: go mod download
+      - run: go test -v ./...
 
   lint:
     name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
-      - name: setup-go
-        uses: actions/setup-go@v4
+      - uses: actions/setup-go@v4
         with:
           go-version: "1.22.6"
+      - uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.52.2
 
-      - name: install-lint
-        run: make install-lint
-
-      - name: run-lint
-        run: make lint
-
-  build-linux:
-    name: build-linux
+  build:
+    name: build
     runs-on: ubuntu-latest
     needs: [test, lint]
     steps:
       - uses: actions/checkout@v3
-
-      - name: setup-go
-        uses: actions/setup-go@v4
+      - uses: actions/setup-go@v4
         with:
           go-version: "1.22.6"
-
-      - name: build-linux
-        run: make build-linux
-
-      - name: upload-artifact
-        uses: actions/upload-artifact@v3
+      - uses: actions/cache@v3
         with:
-          name: helm-valgrade-linux
-          path: helm-valgrade_unix
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - run: go mod download
+      - run: go build -o helm-valgrade -v ./cmd/valgrade
+      - uses: actions/upload-artifact@v3
+        with:
+          name: helm-valgrade
+          path: helm-valgrade
