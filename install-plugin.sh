@@ -72,7 +72,7 @@ verify_helm() {
 }
 
 download_plugin() {
-    local download_url="https://github.com/${GITHUB_REPO}/releases/download/v${PLUGIN_VERSION}/helm-${PLUGIN_NAME}-${OS}-${ARCH}-${PLUGIN_VERSION}.tar.gz"
+    local download_url="https://github.com/${GITHUB_REPO}/releases/download/v${PLUGIN_VERSION}/helm-${PLUGIN_NAME}-${OS}-${ARCH}.tar.gz"
     log "Attempting to download from: $download_url"
 
     if command -v curl &> /dev/null; then
