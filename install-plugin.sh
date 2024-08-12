@@ -101,20 +101,35 @@ install_plugin() {
     local install_dir="${HELM_PLUGIN_DIR}"
 
     log "Extracting plugin..."
-    if ! tar -xzf "helm-${PLUGIN_NAME}.tar.gz" -C "$install_dir"; then
+    if ! tar -xzvf "helm-${PLUGIN_NAME}.tar.gz" -C "$install_dir"; then
         error "Failed to extract plugin. The archive may be corrupted."
     fi
     rm "helm-${PLUGIN_NAME}.tar.gz"
 
-    local bin_path="$install_dir/bin/helm-${PLUGIN_NAME}"
-    if [ ! -f "$bin_path" ]; then
-        error "Plugin binary not found after extraction. Expected at: $bin_path"
+    log "Listing contents of $install_dir:"
+    ls -R "$install_dir"
+
+    local bin_path=""
+    for possible_name in "${PLUGIN_NAME}" "helm-${PLUGIN_NAME}" "${PLUGIN_NAME}_unix" "helm-${PLUGIN_NAME}_unix"; do
+        if [ -f "$install_dir/bin/$possible_name" ]; then
+            bin_path="$install_dir/bin/$possible_name"
+            break
+        elif [ -f "$install_dir/$possible_name" ]; then
+            mkdir -p "$install_dir/bin"
+            mv "$install_dir/$possible_name" "$install_dir/bin/$possible_name"
+            bin_path="$install_dir/bin/$possible_name"
+            break
+        fi
+    done
+
+    if [ -z "$bin_path" ]; then
+        error "Plugin binary not found after extraction. Searched for: ${PLUGIN_NAME}, helm-${PLUGIN_NAME}, ${PLUGIN_NAME}_unix, helm-${PLUGIN_NAME}_unix"
     fi
 
     log "Setting execute permissions..."
     chmod +x "$bin_path"
 
-    log "Plugin installed successfully to: $install_dir"
+    log "Plugin installed successfully to: $bin_path"
 }
 
 verify_installation() {
@@ -122,7 +137,8 @@ verify_installation() {
         log "Verified: ${PLUGIN_NAME} is now installed and ready to use!"
         log "Try running: helm ${PLUGIN_NAME} --help"
     else
-        error "Verification failed. The plugin doesn't seem to be properly installed."
+        error "Verification failed. The plugin doesn't seem to be properly installed. Here's the current plugin list:"
+        helm plugin list
     fi
 }
 
