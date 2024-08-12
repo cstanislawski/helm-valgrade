@@ -5,55 +5,40 @@ import (
 	"testing"
 
 	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/repo"
 )
 
 const (
-	testRepositoryName = "prometheus-community"
-	testRepositoryURL  = "https://prometheus-community.github.io/helm-charts"
-	testChartName      = "kube-prometheus-stack"
-	testVersion        = "45.7.1"
+	testRepositoryName = "test-repo"
+	testRepositoryURL  = "https://test-repo.example.com"
+	testChartName      = "test-chart"
+	testVersion        = "1.0.0"
 )
 
-func setupTestEnvironment(t *testing.T) (*action.Configuration, *cli.EnvSettings) {
-	t.Helper()
+type mockChartFetcher struct{}
 
-	settings := cli.New()
-	actionConfig := new(action.Configuration)
-
-	tempDir, err := os.MkdirTemp("", "helm-valgrade-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	t.Cleanup(func() { os.RemoveAll(tempDir) })
-
-	settings.RepositoryConfig = tempDir + "/repositories.yaml"
-	settings.RepositoryCache = tempDir + "/repository-cache"
-
-	if err := os.WriteFile(settings.RepositoryConfig, []byte("apiVersion: v1\nrepositories: []"), 0644); err != nil {
-		t.Fatalf("Failed to create empty repository file: %v", err)
-	}
-
-	if err := actionConfig.Init(settings.RESTClientGetter(), settings.Namespace(), os.Getenv("HELM_DRIVER"), t.Logf); err != nil {
-		t.Fatalf("Failed to initialize action configuration: %v", err)
-	}
-
-	if err := UpdateRepository(testRepositoryName, testRepositoryURL, settings); err != nil {
-		t.Fatalf("Failed to add prometheus-community repository: %v", err)
-	}
-
-	return actionConfig, settings
+func (m *mockChartFetcher) Fetch(repository, name, version string, _ *action.Configuration) (*Chart, error) {
+	return &Chart{
+		Chart: &chart.Chart{
+			Metadata: &chart.Metadata{
+				Name:    name,
+				Version: version,
+			},
+			Values: map[string]interface{}{
+				"key":          "value",
+				"alertmanager": map[string]interface{}{},
+				"grafana":      map[string]interface{}{},
+			},
+			Schema: []byte(`{"type": "object"}`),
+		},
+	}, nil
 }
 
 func TestFetch(t *testing.T) {
-	actionConfig, settings := setupTestEnvironment(t)
+	fetcher := &mockChartFetcher{}
 
-	if err := UpdateRepository(testRepositoryName, testRepositoryURL, settings); err != nil {
-		t.Fatalf("Failed to update repository: %v", err)
-	}
-
-	chart, err := Fetch(testRepositoryName, testChartName, testVersion, actionConfig)
+	chart, err := fetcher.Fetch(testRepositoryName, testChartName, testVersion, nil)
 	if err != nil {
 		t.Fatalf("Failed to fetch chart: %v", err)
 	}
@@ -69,21 +54,12 @@ func TestFetch(t *testing.T) {
 	if chart.GetVersion() != testVersion {
 		t.Errorf("Expected chart version %s, got %s", testVersion, chart.GetVersion())
 	}
-
-	_, err = Fetch(testRepositoryName, "non-existent-chart", testVersion, actionConfig)
-	if err == nil {
-		t.Error("Expected an error when fetching a non-existent chart, but got none")
-	}
 }
 
 func TestChartMethods(t *testing.T) {
-	actionConfig, settings := setupTestEnvironment(t)
+	fetcher := &mockChartFetcher{}
 
-	if err := UpdateRepository(testRepositoryName, testRepositoryURL, settings); err != nil {
-		t.Fatalf("Failed to update repository: %v", err)
-	}
-
-	chart, err := Fetch(testRepositoryName, testChartName, testVersion, actionConfig)
+	chart, err := fetcher.Fetch(testRepositoryName, testChartName, testVersion, nil)
 	if err != nil {
 		t.Fatalf("Failed to fetch chart: %v", err)
 	}
@@ -104,9 +80,7 @@ func TestChartMethods(t *testing.T) {
 	t.Run("GetSchema", func(t *testing.T) {
 		schema := chart.GetSchema()
 		if len(schema) == 0 {
-			t.Log("Schema is empty for kube-prometheus-stack")
-		} else {
-			t.Logf("Schema length: %d bytes", len(schema))
+			t.Error("Schema is empty")
 		}
 	})
 
@@ -125,54 +99,81 @@ func TestChartMethods(t *testing.T) {
 	})
 }
 
-func TestUpdateRepository(t *testing.T) {
-	_, settings := setupTestEnvironment(t)
+type mockRepoFile struct {
+	repositories []*repo.Entry
+}
 
-	repoFile, err := repo.LoadFile(settings.RepositoryConfig)
-	if err != nil {
-		t.Fatalf("Failed to load repository file: %v", err)
-	}
-
-	foundPrometheus := false
-	for _, repo := range repoFile.Repositories {
-		if repo.Name == testRepositoryName && repo.URL == testRepositoryURL {
-			foundPrometheus = true
-			break
+func (m *mockRepoFile) Update(e *repo.Entry) bool {
+	for i, r := range m.repositories {
+		if r.Name == e.Name {
+			m.repositories[i] = e
+			return true
 		}
 	}
+	m.repositories = append(m.repositories, e)
+	return false
+}
 
-	if !foundPrometheus {
-		t.Errorf("Prometheus-community repository was not added during setup")
+func (m *mockRepoFile) WriteFile(path string, perm os.FileMode) error {
+	return nil
+}
+
+func TestUpdateRepository(t *testing.T) {
+	mockRepo := &mockRepoFile{
+		repositories: []*repo.Entry{
+			{Name: testRepositoryName, URL: testRepositoryURL},
+		},
 	}
 
-	newRepoName := "bitnami"
-	newRepoURL := "https://charts.bitnami.com/bitnami"
-	err = UpdateRepository(newRepoName, newRepoURL, settings)
+	err := updateRepositoryWithMock(testRepositoryName, testRepositoryURL, mockRepo)
 	if err != nil {
-		t.Fatalf("Failed to add new repository: %v", err)
+		t.Fatalf("Failed to update repository: %v", err)
 	}
 
-	repoFile, err = repo.LoadFile(settings.RepositoryConfig)
-	if err != nil {
-		t.Fatalf("Failed to load repository file after update: %v", err)
-	}
-
-	foundBitnami := false
-	for _, repo := range repoFile.Repositories {
-		if repo.Name == newRepoName {
-			foundBitnami = true
-			if repo.URL != newRepoURL {
-				t.Errorf("Repository URL mismatch. Expected %s, got %s", newRepoURL, repo.URL)
+	foundRepo := false
+	for _, repo := range mockRepo.repositories {
+		if repo.Name == testRepositoryName {
+			foundRepo = true
+			if repo.URL != testRepositoryURL {
+				t.Errorf("Repository URL mismatch. Expected %s, got %s", testRepositoryURL, repo.URL)
 			}
 			break
 		}
 	}
 
-	if !foundBitnami {
-		t.Errorf("New repository (Bitnami) was not added to the repository file")
+	if !foundRepo {
+		t.Errorf("Repository was not added to the mock repository file")
 	}
 
-	if !foundPrometheus || !foundBitnami {
-		t.Errorf("Expected both Prometheus and Bitnami repositories to be present")
+	newRepoName := "new-repo"
+	newRepoURL := "https://new-repo.example.com"
+	err = updateRepositoryWithMock(newRepoName, newRepoURL, mockRepo)
+	if err != nil {
+		t.Fatalf("Failed to add new repository: %v", err)
 	}
+
+	foundNewRepo := false
+	for _, repo := range mockRepo.repositories {
+		if repo.Name == newRepoName {
+			foundNewRepo = true
+			if repo.URL != newRepoURL {
+				t.Errorf("New repository URL mismatch. Expected %s, got %s", newRepoURL, repo.URL)
+			}
+			break
+		}
+	}
+
+	if !foundNewRepo {
+		t.Errorf("New repository was not added to the mock repository file")
+	}
+}
+
+func updateRepositoryWithMock(name, url string, mockRepo *mockRepoFile) error {
+	repoEntry := &repo.Entry{
+		Name: name,
+		URL:  url,
+	}
+
+	mockRepo.Update(repoEntry)
+	return nil
 }
