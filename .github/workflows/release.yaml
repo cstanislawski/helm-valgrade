@@ -33,14 +33,14 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - run: go mod download
+      - run: make deps
       - name: build-binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          go build -o helm-valgrade -v ./cmd/valgrade
-          tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade
+          make build-linux
+          tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade_unix
       - uses: actions/upload-artifact@v3
         with:
           name: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}
