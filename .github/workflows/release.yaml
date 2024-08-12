@@ -69,16 +69,28 @@ jobs:
     name: update-plugin-yaml
     needs: create-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v3
-      - name: update-version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          sed -i "s/^version:.*$/version: \"$VERSION\"/" plugin.yaml
-      - name: commit-and-push
+        with:
+          fetch-depth: 0
+      - name: update-version-and-push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+
+          VERSION=${GITHUB_REF#refs/tags/v}
+          sed -i "s/^version:.*$/version: \"$VERSION\"/" plugin.yaml
+
+          git checkout -b update-plugin-yaml-$VERSION
           git add plugin.yaml
           git commit -m "Update plugin.yaml to version $VERSION"
-          git push
+
+          git push origin update-plugin-yaml-$VERSION
+
+          gh pr create --base main --head update-plugin-yaml-$VERSION \
+            --title "Update plugin.yaml to version $VERSION" \
+            --body "Automated update of plugin.yaml for version $VERSION"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
