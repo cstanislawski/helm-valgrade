@@ -36,7 +36,7 @@ lint:
 	golangci-lint run
 
 install-lint:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.50.1
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2
 
 install: build
 	mkdir -p $(HOME)/.helm/plugins/helm-valgrade
