@@ -61,11 +61,11 @@ func Parse() (*Config, error) {
 }
 
 func (cfg *Config) validate() error {
-	var errors []string
-
 	if cfg.Help {
 		return nil
 	}
+
+	var errors []string
 
 	if cfg.VersionBase == "" {
 		errors = append(errors, "version-base is required (use -b or --version-base)")

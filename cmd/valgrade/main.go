@@ -24,6 +24,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if cfg.Help {
+		config.PrintHelp()
+		os.Exit(0)
+	}
+
 	setupLogger(cfg.LogLevel, cfg.Silent)
 
 	if err := run(cfg); err != nil {
