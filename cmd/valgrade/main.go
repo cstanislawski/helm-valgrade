@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/yaml.v3"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
 
@@ -20,11 +22,6 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing configuration: %v\n", err)
 		os.Exit(1)
-	}
-
-	if cfg.Help {
-		config.PrintHelp()
-		os.Exit(0)
 	}
 
 	setupLogger(cfg.LogLevel, cfg.Silent)
@@ -56,7 +53,7 @@ func run(cfg *config.Config) error {
 		return fmt.Errorf("failed to load user values: %w", err)
 	}
 
-	diffResult, err := diff.Compare(baseChart, targetChart, userValues, cfg.KeepValues, cfg.IgnoreMissing)
+	diffResult, err := diff.Compare(baseChart, targetChart, nodeToMap(userValues), cfg.KeepValues, cfg.IgnoreMissing)
 	if err != nil {
 		return fmt.Errorf("failed to compare charts: %w", err)
 	}
@@ -97,35 +94,40 @@ func getLogLevel(level string) zerolog.Level {
 	}
 }
 
-func applyUpgrades(diffResult *diff.Result, userValues map[string]interface{}) map[string]interface{} {
-	upgradedValues := make(map[string]interface{})
-	for k, v := range userValues {
-		upgradedValues[k] = v
-	}
-
+func applyUpgrades(diffResult *diff.Result, userValues *yaml.Node) *yaml.Node {
 	for k, v := range diffResult.Added {
-		upgradedValues[k] = v
+		values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...)
 	}
 
 	for k, v := range diffResult.Modified {
-		upgradedValues[k] = v
+		values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...)
 	}
 
 	for k := range diffResult.Removed {
-		delete(upgradedValues, k)
+		values.DeleteValue(userValues, strings.Split(k, ".")...)
 	}
 
-	return upgradedValues
+	return userValues
 }
 
-func printUpgradedValues(upgradedValues map[string]interface{}) error {
+func printUpgradedValues(upgradedValues *yaml.Node) error {
 	return values.Write(os.Stdout.Name(), upgradedValues)
 }
 
-func writeOutput(upgradedValues map[string]interface{}, outputFile string, inPlace bool, valuesFile string) error {
+func writeOutput(upgradedValues *yaml.Node, outputFile string, inPlace bool, valuesFile string) error {
 	if inPlace {
 		outputFile = valuesFile
 	}
 
 	return values.Write(outputFile, upgradedValues)
+}
+
+func nodeToMap(node *yaml.Node) map[string]interface{} {
+	var m map[string]interface{}
+	err := node.Decode(&m)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to convert yaml.Node to map")
+		return nil
+	}
+	return m
 }
