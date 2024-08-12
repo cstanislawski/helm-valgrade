@@ -24,7 +24,7 @@ error() {
 get_plugin_info() {
     PLUGIN_NAME=$(awk '/name:/ {print $2}' "$HELM_PLUGIN_DIR/plugin.yaml" | tr -d '"')
     PLUGIN_VERSION=$(awk '/version:/ {print $2}' "$HELM_PLUGIN_DIR/plugin.yaml" | tr -d '"')
-    GITHUB_REPO="cstanislawski/${PLUGIN_NAME}"
+    GITHUB_REPO="cstanislawski/helm-${PLUGIN_NAME}"
 
     if [ -z "$PLUGIN_NAME" ] || [ -z "$PLUGIN_VERSION" ]; then
         error "Failed to extract plugin information from plugin.yaml"
@@ -72,27 +72,27 @@ verify_helm() {
 }
 
 download_plugin() {
-    local download_url="https://github.com/${GITHUB_REPO}/releases/download/v${PLUGIN_VERSION}/${PLUGIN_NAME}-${OS}-${ARCH}.tar.gz"
+    local download_url="https://github.com/${GITHUB_REPO}/releases/download/v${PLUGIN_VERSION}/helm-${PLUGIN_NAME}-${OS}-${ARCH}.tar.gz"
     log "Attempting to download from: $download_url"
 
     if command -v curl &> /dev/null; then
-        if ! curl -sS -L -f "$download_url" -o "${PLUGIN_NAME}.tar.gz"; then
+        if ! curl -sS -L -f "$download_url" -o "helm-${PLUGIN_NAME}.tar.gz"; then
             error "Failed to download plugin. Please check if the release for ${OS}-${ARCH} exists."
         fi
     elif command -v wget &> /dev/null; then
-        if ! wget -q "$download_url" -O "${PLUGIN_NAME}.tar.gz"; then
+        if ! wget -q "$download_url" -O "helm-${PLUGIN_NAME}.tar.gz"; then
             error "Failed to download plugin. Please check if the release for ${OS}-${ARCH} exists."
         fi
     else
         error "Neither curl nor wget found. Please install one of them and try again."
     fi
 
-    if [ ! -f "${PLUGIN_NAME}.tar.gz" ]; then
-        error "Download seemed to succeed, but ${PLUGIN_NAME}.tar.gz not found."
+    if [ ! -f "helm-${PLUGIN_NAME}.tar.gz" ]; then
+        error "Download seemed to succeed, but helm-${PLUGIN_NAME}.tar.gz not found."
     fi
 
     log "Download completed. Verifying archive..."
-    if ! tar tf "${PLUGIN_NAME}.tar.gz" &> /dev/null; then
+    if ! tar tf "helm-${PLUGIN_NAME}.tar.gz" &> /dev/null; then
         error "Downloaded file is not a valid tar.gz archive. Please check the release file on GitHub."
     fi
 }
@@ -101,12 +101,12 @@ install_plugin() {
     local install_dir="${HELM_PLUGIN_DIR}"
 
     log "Extracting plugin..."
-    if ! tar -xzf "${PLUGIN_NAME}.tar.gz" -C "$install_dir"; then
+    if ! tar -xzf "helm-${PLUGIN_NAME}.tar.gz" -C "$install_dir"; then
         error "Failed to extract plugin. The archive may be corrupted."
     fi
-    rm "${PLUGIN_NAME}.tar.gz"
+    rm "helm-${PLUGIN_NAME}.tar.gz"
 
-    local bin_path="$install_dir/bin/${PLUGIN_NAME}"
+    local bin_path="$install_dir/bin/helm-${PLUGIN_NAME}"
     if [ ! -f "$bin_path" ]; then
         error "Plugin binary not found after extraction. Expected at: $bin_path"
     fi
