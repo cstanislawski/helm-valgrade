@@ -25,7 +25,7 @@ helm plugin install https://github.com/cstanislawski/helm-valgrade
 
 ### optional flags
 
-- `--repository` / `-r` - the repository where the chart is located
+- `--repository` / `-r` - the name of the repository where the chart is located
 - `--chart` / `-c` - the name of the chart
 - `--keep` / `-k` - exclude specific values from the upgrade process. can be used multiple times. format: `--keep "key1.subkey" --keep "key2"`
 - `--silent` / `-s` - suppress all output
@@ -34,11 +34,22 @@ helm plugin install https://github.com/cstanislawski/helm-valgrade
 - `--ignore-missing` - ignore missing values in the old chart version. does not apply to user-specified changes
 - `--help` / `-h` - display the help message
 
-## TODO
+## usage
 
-sections to be added:
+to use helm-valgrade, run:
 
-- usage
-- examples
-- how it works
-- local development
+```bash
+helm valgrade [flags]
+```
+
+example:
+
+```bash
+helm valgrade -b 58.5.2 -t 58.7.0 -f values.yaml -r prometheus-community -c kube-prometheus-stack -o new-values.yaml
+```
+
+note: ensure that the repository (e.g., 'prometheus-community') is already added to your helm repositories. you can add a repository using `helm repo add prometheus-community https://prometheus-community.github.io/helm-charts`
+
+## license
+
+this project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
