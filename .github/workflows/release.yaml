@@ -1,0 +1,100 @@
+name: Release helm-valgrade
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22.6"
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -o helm-valgrade -v ./cmd/valgrade
+          tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+
+  create-release:
+    name: Create Release
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for asset in helm-valgrade-*/*.tar.gz; do
+            asset_name=$(basename "$asset")
+            echo "Uploading $asset_name"
+            gh release upload ${{ github.ref_name }} "$asset" --clobber
+          done
+
+  update-plugin-yaml:
+    name: Update plugin.yaml
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Update plugin.yaml
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          sed -i "s/^version:.*$/version: \"$VERSION\"/" plugin.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add plugin.yaml
+          git commit -m "Update plugin.yaml to version $VERSION"
+          git push
