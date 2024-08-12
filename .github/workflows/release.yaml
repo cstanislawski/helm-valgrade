@@ -40,7 +40,13 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           go build -o helm-valgrade ./cmd/valgrade
-          tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade
+          tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade plugin.yaml
+      - name: verify-artifacts
+        run: |
+          for archive in helm-valgrade-*.tar.gz; do
+            echo "Verifying $archive"
+            tar tvf "$archive"
+          done
       - uses: actions/upload-artifact@v3
         with:
           name: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}
