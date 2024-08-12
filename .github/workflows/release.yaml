@@ -39,8 +39,8 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          make build-linux
-          tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade_unix
+          go build -o helm-valgrade ./cmd/valgrade
+          tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade
       - uses: actions/upload-artifact@v3
         with:
           name: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}
