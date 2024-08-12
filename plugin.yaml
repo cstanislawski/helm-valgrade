@@ -1,5 +1,5 @@
 name: "valgrade"
-version: "1.0.0"
+version: "1.0.1"
 usage: "upgrade values while preserving custom changes"
 description: |-
   This plugin helps upgrade Helm chart values files by carrying over
