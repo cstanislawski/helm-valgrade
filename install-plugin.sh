@@ -76,7 +76,7 @@ download_plugin() {
     log "Attempting to download from: $download_url"
 
     if command -v curl &> /dev/null; then
-        if ! curl -sS -L -f "$download_url" -o "helm-${PLUGIN_NAME}.tar.gz"; then
+        if ! curl -sSL "$download_url" -o "helm-${PLUGIN_NAME}.tar.gz"; then
             error "Failed to download plugin. Please check if the release for ${OS}-${ARCH} exists."
         fi
     elif command -v wget &> /dev/null; then
