@@ -7,5 +7,5 @@ description: |-
 ignoreFlags: false
 command: "$HELM_PLUGIN_DIR/bin/helm-valgrade"
 hooks:
-  install: "go build -o bin/helm-valgrade cmd/valgrade/main.go"
-  update: "go build -o bin/helm-valgrade cmd/valgrade/main.go"
+  install: "$HELM_PLUGIN_DIR/install-plugin.sh"
+  update: "$HELM_PLUGIN_DIR/install-plugin.sh"
