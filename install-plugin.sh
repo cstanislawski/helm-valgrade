@@ -72,7 +72,7 @@ verify_helm() {
 }
 
 download_plugin() {
-    local download_url="https://github.com/${GITHUB_REPO}/releases/download/v${PLUGIN_VERSION}/helm-${PLUGIN_NAME}-${OS}-${ARCH}.tar.gz"
+    local download_url="https://github.com/${GITHUB_REPO}/releases/download/v${PLUGIN_VERSION}/helm-${PLUGIN_NAME}-${OS}-${ARCH}-${PLUGIN_VERSION}.tar.gz"
     log "Attempting to download from: $download_url"
 
     if command -v curl &> /dev/null; then
@@ -109,10 +109,13 @@ install_plugin() {
     log "Setting up plugin binary..."
     mkdir -p "$install_dir/bin"
 
-    if [ -f "$install_dir/helm-${PLUGIN_NAME}_unix" ]; then
-        mv "$install_dir/helm-${PLUGIN_NAME}_unix" "$install_dir/bin/helm-${PLUGIN_NAME}"
-    elif [ -f "$install_dir/${PLUGIN_NAME}_unix" ]; then
-        mv "$install_dir/${PLUGIN_NAME}_unix" "$install_dir/bin/helm-${PLUGIN_NAME}"
+    local extracted_binary="helm-${PLUGIN_NAME}-${OS}-${ARCH}"
+    if [ "$OS" = "windows" ]; then
+        extracted_binary="${extracted_binary}.exe"
+    fi
+
+    if [ -f "$install_dir/$extracted_binary" ]; then
+        mv "$install_dir/$extracted_binary" "$install_dir/bin/helm-${PLUGIN_NAME}"
     else
         error "Plugin binary not found after extraction."
     fi
