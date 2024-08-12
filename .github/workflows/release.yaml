@@ -1,4 +1,4 @@
-name: Release helm-valgrade
+name: release helm-valgrade
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-release:
-    name: Build and Release
+    name: build-and-release
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -24,15 +24,15 @@ jobs:
             goarch: amd64
 
     steps:
-      - name: Checkout code
+      - name: checkout
         uses: actions/checkout@v3
 
-      - name: Set up Go
+      - name: setup-go
         uses: actions/setup-go@v4
         with:
           go-version: "1.22.6"
 
-      - name: Build binary
+      - name: build-binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -40,24 +40,24 @@ jobs:
           go build -o helm-valgrade -v ./cmd/valgrade
           tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade
 
-      - name: Upload artifact
+      - name: upload-artifact
         uses: actions/upload-artifact@v3
         with:
           name: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}
           path: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
 
   create-release:
-    name: Create Release
+    name: create-release
     needs: build-and-release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: checkout
         uses: actions/checkout@v3
 
-      - name: Download artifacts
+      - name: download-artifact
         uses: actions/download-artifact@v3
 
-      - name: Create Release
+      - name: create-release
         id: create_release
         uses: actions/create-release@v1
         env:
@@ -68,7 +68,7 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload Release Assets
+      - name: upload-release-asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -79,19 +79,19 @@ jobs:
           done
 
   update-plugin-yaml:
-    name: Update plugin.yaml
+    name: update-plugin-yaml
     needs: create-release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: checkout
         uses: actions/checkout@v3
 
-      - name: Update plugin.yaml
+      - name: update-version
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           sed -i "s/^version:.*$/version: \"$VERSION\"/" plugin.yaml
 
-      - name: Commit and push changes
+      - name: commit-and-push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
