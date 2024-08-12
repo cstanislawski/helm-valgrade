@@ -109,13 +109,8 @@ install_plugin() {
     log "Setting up plugin binary..."
     mkdir -p "$install_dir/bin"
 
-    local extracted_binary="helm-${PLUGIN_NAME}-${OS}-${ARCH}"
-    if [ "$OS" = "windows" ]; then
-        extracted_binary="${extracted_binary}.exe"
-    fi
-
-    if [ -f "$install_dir/$extracted_binary" ]; then
-        mv "$install_dir/$extracted_binary" "$install_dir/bin/helm-${PLUGIN_NAME}"
+    if [ -f "$install_dir/helm-${PLUGIN_NAME}" ]; then
+        mv "$install_dir/helm-${PLUGIN_NAME}" "$install_dir/bin/helm-${PLUGIN_NAME}"
     else
         error "Plugin binary not found after extraction."
     fi

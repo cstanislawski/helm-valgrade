@@ -44,9 +44,6 @@ deps:
 	$(GOGET) ./...
 	$(GOMOD) tidy
 
-build-linux:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v ./cmd/valgrade
-
 lint:
 	golangci-lint run
 
