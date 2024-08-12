@@ -50,23 +50,20 @@ jobs:
     name: create-release
     needs: build-and-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
-      - name: create-release
+      - name: create-release-and-upload-assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          assets=$(find . -name "helm-valgrade-*.tar.gz")
           gh release create ${{ github.ref_name }} \
             --title "Release ${{ github.ref_name }}" \
-            --generate-notes
-      - name: upload-release-assets
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for asset in helm-valgrade-*/*.tar.gz; do
-            gh release upload ${{ github.ref_name }} "$asset" --clobber
-          done
+            --generate-notes \
+            $assets
 
   update-plugin-yaml:
     name: update-plugin-yaml
