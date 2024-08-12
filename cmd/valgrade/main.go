@@ -58,7 +58,10 @@ func run(cfg *config.Config) error {
 		return fmt.Errorf("failed to compare charts: %w", err)
 	}
 
-	upgradedValues := applyUpgrades(diffResult, userValues)
+	upgradedValues, err := applyUpgrades(diffResult, userValues)
+	if err != nil {
+		return fmt.Errorf("failed to apply upgrades: %w", err)
+	}
 
 	if cfg.DryRun {
 		return printUpgradedValues(upgradedValues)
@@ -94,20 +97,26 @@ func getLogLevel(level string) zerolog.Level {
 	}
 }
 
-func applyUpgrades(diffResult *diff.Result, userValues *yaml.Node) *yaml.Node {
+func applyUpgrades(diffResult *diff.Result, userValues *yaml.Node) (*yaml.Node, error) {
 	for k, v := range diffResult.Added {
-		values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...)
+		if err := values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...); err != nil {
+			return nil, fmt.Errorf("failed to set added value %s: %w", k, err)
+		}
 	}
 
 	for k, v := range diffResult.Modified {
-		values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...)
+		if err := values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...); err != nil {
+			return nil, fmt.Errorf("failed to set modified value %s: %w", k, err)
+		}
 	}
 
 	for k := range diffResult.Removed {
-		values.DeleteValue(userValues, strings.Split(k, ".")...)
+		if err := values.DeleteValue(userValues, strings.Split(k, ".")...); err != nil {
+			return nil, fmt.Errorf("failed to delete removed value %s: %w", k, err)
+		}
 	}
 
-	return userValues
+	return userValues, nil
 }
 
 func printUpgradedValues(upgradedValues *yaml.Node) error {
