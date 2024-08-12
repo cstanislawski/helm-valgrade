@@ -39,6 +39,10 @@ func setupTestEnvironment(t *testing.T) (*action.Configuration, *cli.EnvSettings
 		t.Fatalf("Failed to initialize action configuration: %v", err)
 	}
 
+	if err := UpdateRepository(testRepositoryName, testRepositoryURL, settings); err != nil {
+		t.Fatalf("Failed to add prometheus-community repository: %v", err)
+	}
+
 	return actionConfig, settings
 }
 
@@ -64,6 +68,11 @@ func TestFetch(t *testing.T) {
 
 	if chart.GetVersion() != testVersion {
 		t.Errorf("Expected chart version %s, got %s", testVersion, chart.GetVersion())
+	}
+
+	_, err = Fetch(testRepositoryName, "non-existent-chart", testVersion, actionConfig)
+	if err == nil {
+		t.Error("Expected an error when fetching a non-existent chart, but got none")
 	}
 }
 
@@ -119,29 +128,51 @@ func TestChartMethods(t *testing.T) {
 func TestUpdateRepository(t *testing.T) {
 	_, settings := setupTestEnvironment(t)
 
-	err := UpdateRepository(testRepositoryName, testRepositoryURL, settings)
-	if err != nil {
-		t.Fatalf("Failed to update repository: %v", err)
-	}
-
-	if _, err := os.Stat(settings.RepositoryConfig); os.IsNotExist(err) {
-		t.Errorf("Repository file was not created")
-	}
-
 	repoFile, err := repo.LoadFile(settings.RepositoryConfig)
 	if err != nil {
 		t.Fatalf("Failed to load repository file: %v", err)
 	}
 
-	found := false
+	foundPrometheus := false
 	for _, repo := range repoFile.Repositories {
 		if repo.Name == testRepositoryName && repo.URL == testRepositoryURL {
-			found = true
+			foundPrometheus = true
 			break
 		}
 	}
 
-	if !found {
-		t.Errorf("Test repository was not added to the repository file")
+	if !foundPrometheus {
+		t.Errorf("Prometheus-community repository was not added during setup")
+	}
+
+	newRepoName := "bitnami"
+	newRepoURL := "https://charts.bitnami.com/bitnami"
+	err = UpdateRepository(newRepoName, newRepoURL, settings)
+	if err != nil {
+		t.Fatalf("Failed to add new repository: %v", err)
+	}
+
+	repoFile, err = repo.LoadFile(settings.RepositoryConfig)
+	if err != nil {
+		t.Fatalf("Failed to load repository file after update: %v", err)
+	}
+
+	foundBitnami := false
+	for _, repo := range repoFile.Repositories {
+		if repo.Name == newRepoName {
+			foundBitnami = true
+			if repo.URL != newRepoURL {
+				t.Errorf("Repository URL mismatch. Expected %s, got %s", newRepoURL, repo.URL)
+			}
+			break
+		}
+	}
+
+	if !foundBitnami {
+		t.Errorf("New repository (Bitnami) was not added to the repository file")
+	}
+
+	if !foundPrometheus || !foundBitnami {
+		t.Errorf("Expected both Prometheus and Bitnami repositories to be present")
 	}
 }
