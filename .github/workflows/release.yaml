@@ -1,0 +1,87 @@
+name: release helm-valgrade
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  build-and-release:
+    name: build-and-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version: "1.22.6"
+      - uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - run: make deps
+      - name: build-binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          make build-linux
+          tar czf helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz helm-valgrade_unix
+      - uses: actions/upload-artifact@v3
+        with:
+          name: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+
+  create-release:
+    name: create-release
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: create-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "Release ${{ github.ref_name }}" \
+            --generate-notes
+      - name: upload-release-assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for asset in helm-valgrade-*/*.tar.gz; do
+            gh release upload ${{ github.ref_name }} "$asset" --clobber
+          done
+
+  update-plugin-yaml:
+    name: update-plugin-yaml
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: update-version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          sed -i "s/^version:.*$/version: \"$VERSION\"/" plugin.yaml
+      - name: commit-and-push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add plugin.yaml
+          git commit -m "Update plugin.yaml to version $VERSION"
+          git push
