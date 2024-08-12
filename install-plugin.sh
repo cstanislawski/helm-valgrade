@@ -106,25 +106,18 @@ install_plugin() {
     fi
     rm "helm-${PLUGIN_NAME}.tar.gz"
 
-    log "Listing contents of $install_dir:"
-    ls -R "$install_dir"
+    log "Setting up plugin binary..."
+    mkdir -p "$install_dir/bin"
 
-    local bin_path=""
-    for possible_name in "${PLUGIN_NAME}" "helm-${PLUGIN_NAME}" "${PLUGIN_NAME}_unix" "helm-${PLUGIN_NAME}_unix"; do
-        if [ -f "$install_dir/bin/$possible_name" ]; then
-            bin_path="$install_dir/bin/$possible_name"
-            break
-        elif [ -f "$install_dir/$possible_name" ]; then
-            mkdir -p "$install_dir/bin"
-            mv "$install_dir/$possible_name" "$install_dir/bin/$possible_name"
-            bin_path="$install_dir/bin/$possible_name"
-            break
-        fi
-    done
-
-    if [ -z "$bin_path" ]; then
-        error "Plugin binary not found after extraction. Searched for: ${PLUGIN_NAME}, helm-${PLUGIN_NAME}, ${PLUGIN_NAME}_unix, helm-${PLUGIN_NAME}_unix"
+    if [ -f "$install_dir/helm-${PLUGIN_NAME}_unix" ]; then
+        mv "$install_dir/helm-${PLUGIN_NAME}_unix" "$install_dir/bin/helm-${PLUGIN_NAME}"
+    elif [ -f "$install_dir/${PLUGIN_NAME}_unix" ]; then
+        mv "$install_dir/${PLUGIN_NAME}_unix" "$install_dir/bin/helm-${PLUGIN_NAME}"
+    else
+        error "Plugin binary not found after extraction."
     fi
+
+    local bin_path="$install_dir/bin/helm-${PLUGIN_NAME}"
 
     log "Setting execute permissions..."
     chmod +x "$bin_path"
