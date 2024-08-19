@@ -45,7 +45,7 @@ deps:
 	$(GOMOD) tidy
 
 lint:
-	golangci-lint run
+	golangci-lint run --timeout 5m
 
 install-lint:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2
