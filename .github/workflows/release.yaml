@@ -41,7 +41,7 @@ jobs:
             echo "Verifying $archive"
             tar tvf "$archive"
           done
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}
           path: helm-valgrade-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
