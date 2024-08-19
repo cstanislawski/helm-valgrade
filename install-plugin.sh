@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-[ -z "$HELM_BIN" ] && HELM_BIN=$(command -v helm)
-[ -z "$HELM_HOME" ] && HELM_HOME=$(helm env | grep 'HELM_DATA_HOME' | cut -d '=' -f2 | tr -d '"')
+HELM_BIN="${HELM_BIN:-$(command -v helm)}"
+HELM_HOME="${HELM_HOME:-$(helm env HELM_DATA_HOME 2>/dev/null || echo "$HOME/.helm")}"
 mkdir -p "$HELM_HOME"
-: "${HELM_PLUGIN_DIR:="$HELM_HOME/plugins/helm-valgrade"}"
+HELM_PLUGIN_DIR="${HELM_PLUGIN_DIR:-$HELM_HOME/plugins/helm-valgrade}"
 
 PLUGIN_NAME=$(awk '/name:/ {print $2}' "$HELM_PLUGIN_DIR/plugin.yaml" | tr -d '"')
 PLUGIN_VERSION=$(awk '/version:/ {print $2}' "$HELM_PLUGIN_DIR/plugin.yaml" | tr -d '"')
