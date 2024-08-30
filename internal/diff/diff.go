@@ -3,8 +3,10 @@ package diff
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cstanislawski/helm-valgrade/internal/chart"
+	"github.com/cstanislawski/helm-valgrade/internal/values"
 )
 
 type Result struct {
@@ -49,6 +51,9 @@ func compareValues(prefix string, base, target, user map[string]interface{}, kee
 				result.Added[path] = userVal
 			} else {
 				result.Added[path] = v
+				if err := values.SetNestedValue(user, v, strings.Split(path, ".")...); err != nil {
+					return fmt.Errorf("failed to set added value %s: %w", path, err)
+				}
 			}
 			continue
 		}
@@ -58,13 +63,21 @@ func compareValues(prefix string, base, target, user map[string]interface{}, kee
 				result.Modified[path] = userVal
 			} else {
 				result.Modified[path] = v
+				if err := values.SetNestedValue(user, v, strings.Split(path, ".")...); err != nil {
+					return fmt.Errorf("failed to set modified value %s: %w", path, err)
+				}
 			}
 			continue
 		}
 
 		switch typedV := v.(type) {
 		case map[string]interface{}:
-			err := compareValues(path, baseVal.(map[string]interface{}), typedV, getUserSubMap(user, k), keepValues, ignoreMissing, result)
+			userSubMap := getUserSubMap(user, k)
+			if userSubMap == nil {
+				userSubMap = make(map[string]interface{})
+				user[k] = userSubMap
+			}
+			err := compareValues(path, baseVal.(map[string]interface{}), typedV, userSubMap, keepValues, ignoreMissing, result)
 			if err != nil {
 				return err
 			}
@@ -74,6 +87,9 @@ func compareValues(prefix string, base, target, user map[string]interface{}, kee
 					result.Modified[path] = userVal
 				} else {
 					result.Modified[path] = v
+					if err := values.SetNestedValue(user, v, strings.Split(path, ".")...); err != nil {
+						return fmt.Errorf("failed to set modified value %s: %w", path, err)
+					}
 				}
 			}
 		}

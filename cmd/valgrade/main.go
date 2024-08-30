@@ -8,8 +8,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/cli"
 
 	"github.com/cstanislawski/helm-valgrade/internal/chart"
 	"github.com/cstanislawski/helm-valgrade/internal/config"
@@ -31,48 +29,71 @@ func main() {
 
 	setupLogger(cfg.LogLevel, cfg.Silent)
 
-	if err := run(cfg); err != nil {
-		log.Fatal().Err(err).Msg("Failed to execute valgrade")
+	errors := run(cfg)
+	if len(errors) > 0 {
+		log.Error().Msg("Failed to execute valgrade")
+		for _, err := range errors {
+			log.Error().Msgf("%v", err)
+		}
+		os.Exit(1)
 	}
+
+	log.Info().Msg("Valgrade completed successfully")
 }
 
-func run(cfg *config.Config) error {
-	settings := cli.New()
-	actionConfig := new(action.Configuration)
-	if err := actionConfig.Init(settings.RESTClientGetter(), settings.Namespace(), os.Getenv("HELM_DRIVER"), log.Printf); err != nil {
-		return fmt.Errorf("failed to initialize action configuration: %w", err)
+func run(cfg *config.Config) []error {
+	var errors []error
+
+	baseChart, err := chart.Fetch(cfg.Repository, cfg.ChartName, cfg.VersionBase, nil)
+	if err != nil {
+		errors = append(errors, fmt.Errorf("failed to fetch base chart: %w", err))
+		return errors
 	}
 
-	baseChart, err := chart.Fetch(cfg.Repository, cfg.ChartName, cfg.VersionBase, actionConfig)
+	targetChart, err := chart.Fetch(cfg.Repository, cfg.ChartName, cfg.VersionTarget, nil)
 	if err != nil {
-		return fmt.Errorf("failed to fetch base chart: %w", err)
-	}
-
-	targetChart, err := chart.Fetch(cfg.Repository, cfg.ChartName, cfg.VersionTarget, actionConfig)
-	if err != nil {
-		return fmt.Errorf("failed to fetch target chart: %w", err)
+		errors = append(errors, fmt.Errorf("failed to fetch target chart: %w", err))
+		return errors
 	}
 
 	userValues, err := values.Load(cfg.ValuesFile)
 	if err != nil {
-		return fmt.Errorf("failed to load user values: %w", err)
+		errors = append(errors, fmt.Errorf("failed to load user values: %w", err))
+		return errors
 	}
 
-	diffResult, err := diff.Compare(baseChart, targetChart, nodeToMap(userValues), cfg.KeepValues, cfg.IgnoreMissing)
-	if err != nil {
-		return fmt.Errorf("failed to compare charts: %w", err)
+	userValuesMap := make(map[string]interface{})
+	if err := userValues.Decode(&userValuesMap); err != nil {
+		errors = append(errors, fmt.Errorf("failed to decode user values: %w", err))
+		return errors
 	}
 
-	upgradedValues, err := applyUpgrades(diffResult, userValues)
+	diffResult, err := diff.Compare(baseChart, targetChart, userValuesMap, cfg.KeepValues, cfg.IgnoreMissing)
 	if err != nil {
-		return fmt.Errorf("failed to apply upgrades: %w", err)
+		errors = append(errors, fmt.Errorf("failed to compare charts: %w", err))
+		return errors
+	}
+
+	upgradedValues, upgradeErrors := applyUpgrades(diffResult, userValues)
+	if len(upgradeErrors) > 0 {
+		for _, err := range upgradeErrors {
+			errors = append(errors, fmt.Errorf("failed to apply upgrades: %w", err))
+		}
+		return errors
 	}
 
 	if cfg.DryRun {
-		return printUpgradedValues(upgradedValues)
+		if err := printUpgradedValues(upgradedValues); err != nil {
+			errors = append(errors, fmt.Errorf("failed to print upgraded values: %w", err))
+		}
+		return errors
 	}
 
-	return writeOutput(upgradedValues, cfg.OutputFile, cfg.InPlace, cfg.ValuesFile)
+	if err := writeOutput(upgradedValues, cfg.OutputFile, cfg.InPlace, cfg.ValuesFile); err != nil {
+		errors = append(errors, fmt.Errorf("failed to write output: %w", err))
+	}
+
+	return errors
 }
 
 func setupLogger(level string, silent bool) {
@@ -102,23 +123,29 @@ func getLogLevel(level string) zerolog.Level {
 	}
 }
 
-func applyUpgrades(diffResult *diff.Result, userValues *yaml.Node) (*yaml.Node, error) {
+func applyUpgrades(diffResult *diff.Result, userValues *yaml.Node) (*yaml.Node, []error) {
+	var errors []error
+
 	for k, v := range diffResult.Added {
 		if err := values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...); err != nil {
-			return nil, fmt.Errorf("failed to set added value %s: %w", k, err)
+			errors = append(errors, fmt.Errorf("failed to set added value %s: %w", k, err))
 		}
 	}
 
 	for k, v := range diffResult.Modified {
 		if err := values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...); err != nil {
-			return nil, fmt.Errorf("failed to set modified value %s: %w", k, err)
+			errors = append(errors, fmt.Errorf("failed to set modified value %s: %w", k, err))
 		}
 	}
 
 	for k := range diffResult.Removed {
 		if err := values.DeleteValue(userValues, strings.Split(k, ".")...); err != nil {
-			return nil, fmt.Errorf("failed to delete removed value %s: %w", k, err)
+			errors = append(errors, fmt.Errorf("failed to delete removed value %s: %w", k, err))
 		}
+	}
+
+	if len(errors) > 0 {
+		return nil, errors
 	}
 
 	return userValues, nil
@@ -129,19 +156,20 @@ func printUpgradedValues(upgradedValues *yaml.Node) error {
 }
 
 func writeOutput(upgradedValues *yaml.Node, outputFile string, inPlace bool, valuesFile string) error {
+	var targetFile string
 	if inPlace {
-		outputFile = valuesFile
+		targetFile = valuesFile
+		log.Info().Msg("Updating values file in-place")
+	} else {
+		targetFile = outputFile
+		log.Info().Str("file", outputFile).Msg("Writing updated values to new file")
 	}
 
-	return values.Write(outputFile, upgradedValues)
-}
-
-func nodeToMap(node *yaml.Node) map[string]interface{} {
-	var m map[string]interface{}
-	err := node.Decode(&m)
+	err := values.Write(targetFile, upgradedValues)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to convert yaml.Node to map")
-		return nil
+		return fmt.Errorf("failed to write updated values: %w", err)
 	}
-	return m
+
+	log.Info().Str("file", targetFile).Msg("Successfully wrote updated values")
+	return nil
 }
