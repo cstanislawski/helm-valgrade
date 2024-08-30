@@ -3,10 +3,8 @@ package diff
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/cstanislawski/helm-valgrade/internal/chart"
-	"github.com/cstanislawski/helm-valgrade/internal/values"
 )
 
 type Result struct {
@@ -25,7 +23,9 @@ func Compare(base, target *chart.Chart, userValues map[string]interface{}, keepV
 	baseValues := base.GetDefaultValues()
 	targetValues := target.GetDefaultValues()
 
-	err := compareValues("", baseValues, targetValues, userValues, keepValues, ignoreMissing, result)
+	userChanges := identifyUserChanges("", baseValues, userValues)
+
+	err := compareValues("", baseValues, targetValues, userChanges, keepValues, ignoreMissing, result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare values: %w", err)
 	}
@@ -35,7 +35,40 @@ func Compare(base, target *chart.Chart, userValues map[string]interface{}, keepV
 	return result, nil
 }
 
-func compareValues(prefix string, base, target, user map[string]interface{}, keepValues []string, ignoreMissing bool, result *Result) error {
+func identifyUserChanges(prefix string, base, user map[string]interface{}) map[string]interface{} {
+	changes := make(map[string]interface{})
+
+	for k, v := range user {
+		path := joinPath(prefix, k)
+		baseVal, baseExists := base[k]
+
+		if !baseExists {
+			changes[path] = v
+			continue
+		}
+
+		if reflect.TypeOf(v) != reflect.TypeOf(baseVal) {
+			changes[path] = v
+			continue
+		}
+
+		switch typedV := v.(type) {
+		case map[string]interface{}:
+			subChanges := identifyUserChanges(path, baseVal.(map[string]interface{}), typedV)
+			for subK, subV := range subChanges {
+				changes[subK] = subV
+			}
+		default:
+			if !reflect.DeepEqual(v, baseVal) {
+				changes[path] = v
+			}
+		}
+	}
+
+	return changes
+}
+
+func compareValues(prefix string, base, target, userChanges map[string]interface{}, keepValues []string, ignoreMissing bool, result *Result) error {
 	for k, v := range target {
 		path := joinPath(prefix, k)
 
@@ -44,52 +77,38 @@ func compareValues(prefix string, base, target, user map[string]interface{}, kee
 		}
 
 		baseVal, baseExists := base[k]
-		userVal, userExists := user[k]
+		userVal, userChanged := userChanges[path]
 
 		if !baseExists {
-			if userExists {
+			if userChanged {
 				result.Added[path] = userVal
 			} else {
 				result.Added[path] = v
-				if err := values.SetNestedValue(user, v, strings.Split(path, ".")...); err != nil {
-					return fmt.Errorf("failed to set added value %s: %w", path, err)
-				}
 			}
 			continue
 		}
 
 		if reflect.TypeOf(v) != reflect.TypeOf(baseVal) {
-			if userExists {
+			if userChanged {
 				result.Modified[path] = userVal
 			} else {
 				result.Modified[path] = v
-				if err := values.SetNestedValue(user, v, strings.Split(path, ".")...); err != nil {
-					return fmt.Errorf("failed to set modified value %s: %w", path, err)
-				}
 			}
 			continue
 		}
 
 		switch typedV := v.(type) {
 		case map[string]interface{}:
-			userSubMap := getUserSubMap(user, k)
-			if userSubMap == nil {
-				userSubMap = make(map[string]interface{})
-				user[k] = userSubMap
-			}
-			err := compareValues(path, baseVal.(map[string]interface{}), typedV, userSubMap, keepValues, ignoreMissing, result)
+			err := compareValues(path, baseVal.(map[string]interface{}), typedV, userChanges, keepValues, ignoreMissing, result)
 			if err != nil {
 				return err
 			}
 		default:
 			if !reflect.DeepEqual(v, baseVal) {
-				if userExists {
+				if userChanged {
 					result.Modified[path] = userVal
 				} else {
 					result.Modified[path] = v
-					if err := values.SetNestedValue(user, v, strings.Split(path, ".")...); err != nil {
-						return fmt.Errorf("failed to set modified value %s: %w", path, err)
-					}
 				}
 			}
 		}
@@ -109,16 +128,6 @@ func compareValues(prefix string, base, target, user map[string]interface{}, kee
 		}
 	}
 
-	return nil
-}
-
-func getUserSubMap(user map[string]interface{}, key string) map[string]interface{} {
-	if user == nil {
-		return nil
-	}
-	if subMap, ok := user[key].(map[string]interface{}); ok {
-		return subMap
-	}
 	return nil
 }
 
