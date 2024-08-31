@@ -3,6 +3,7 @@ package values
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -199,7 +200,13 @@ nestedKey:
 			name:     "Set non-existent key",
 			keys:     []string{"nonExistent"},
 			newValue: "newValue",
-			wantErr:  true,
+			wantErr:  false,
+		},
+		{
+			name:     "Set deeply nested non-existent key",
+			keys:     []string{"a", "b", "c", "d"},
+			newValue: "deeplyNestedValue",
+			wantErr:  false,
 		},
 	}
 
@@ -217,6 +224,131 @@ nestedKey:
 				}
 				if got != tt.newValue {
 					t.Errorf("SetValue() = %v, want %v", got, tt.newValue)
+				}
+			}
+		})
+	}
+}
+
+func TestDeleteValue(t *testing.T) {
+	yamlContent := `
+key: value
+nestedKey:
+  subKey: subValue
+  anotherSubKey: anotherSubValue
+`
+	var node yaml.Node
+	err := yaml.Unmarshal([]byte(yamlContent), &node)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name    string
+		keys    []string
+		wantErr bool
+	}{
+		{
+			name:    "Delete top-level key",
+			keys:    []string{"key"},
+			wantErr: false,
+		},
+		{
+			name:    "Delete nested key",
+			keys:    []string{"nestedKey", "subKey"},
+			wantErr: false,
+		},
+		{
+			name:    "Delete non-existent key",
+			keys:    []string{"nonExistent"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := DeleteValue(&node, tt.keys...)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DeleteValue() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				_, err := GetValue(&node, tt.keys...)
+				if err == nil {
+					t.Errorf("Value still exists after deletion")
+				}
+			}
+		})
+	}
+}
+
+func TestSetNestedValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		initial  map[string]interface{}
+		keys     []string
+		value    interface{}
+		expected map[string]interface{}
+		wantErr  bool
+	}{
+		{
+			name:     "Set top-level key",
+			initial:  map[string]interface{}{},
+			keys:     []string{"key"},
+			value:    "value",
+			expected: map[string]interface{}{"key": "value"},
+			wantErr:  false,
+		},
+		{
+			name:     "Set nested key",
+			initial:  map[string]interface{}{"nested": map[string]interface{}{}},
+			keys:     []string{"nested", "key"},
+			value:    "value",
+			expected: map[string]interface{}{"nested": map[string]interface{}{"key": "value"}},
+			wantErr:  false,
+		},
+		{
+			name:    "Set key in non-map value",
+			initial: map[string]interface{}{"key": "value"},
+			keys:    []string{"key", "subkey"},
+			value:   "new value",
+			wantErr: true,
+		},
+		{
+			name:     "Set deeply nested key",
+			initial:  map[string]interface{}{},
+			keys:     []string{"a", "b", "c", "d"},
+			value:    "deep value",
+			expected: map[string]interface{}{"a": map[string]interface{}{"b": map[string]interface{}{"c": map[string]interface{}{"d": "deep value"}}}},
+			wantErr:  false,
+		},
+		{
+			name:    "Set with empty keys",
+			initial: map[string]interface{}{},
+			keys:    []string{},
+			value:   "value",
+			wantErr: true,
+		},
+		{
+			name:     "Override existing value",
+			initial:  map[string]interface{}{"key": "old value"},
+			keys:     []string{"key"},
+			value:    "new value",
+			expected: map[string]interface{}{"key": "new value"},
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := SetNestedValue(tt.initial, tt.value, tt.keys...)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SetNestedValue() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				if !reflect.DeepEqual(tt.initial, tt.expected) {
+					t.Errorf("SetNestedValue() = %v, want %v", tt.initial, tt.expected)
 				}
 			}
 		})

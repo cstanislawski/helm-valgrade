@@ -67,6 +67,10 @@ func SetValue(node *yaml.Node, newValue string, keys ...string) error {
 		return fmt.Errorf("expected document node")
 	}
 
+	if len(node.Content) == 0 {
+		node.Content = append(node.Content, &yaml.Node{Kind: yaml.MappingNode})
+	}
+
 	current := node.Content[0]
 	for _, key := range keys[:len(keys)-1] {
 		found := false
@@ -78,7 +82,9 @@ func SetValue(node *yaml.Node, newValue string, keys ...string) error {
 			}
 		}
 		if !found {
-			return fmt.Errorf("key not found: %s", key)
+			newMap := &yaml.Node{Kind: yaml.MappingNode}
+			current.Content = append(current.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: key}, newMap)
+			current = newMap
 		}
 	}
 
@@ -90,7 +96,8 @@ func SetValue(node *yaml.Node, newValue string, keys ...string) error {
 		}
 	}
 
-	return fmt.Errorf("key not found: %s", lastKey)
+	current.Content = append(current.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: lastKey}, &yaml.Node{Kind: yaml.ScalarNode, Value: newValue})
+	return nil
 }
 
 func DeleteValue(node *yaml.Node, keys ...string) error {
@@ -122,4 +129,29 @@ func DeleteValue(node *yaml.Node, keys ...string) error {
 	}
 
 	return fmt.Errorf("key not found: %s", lastKey)
+}
+
+func SetNestedValue(m map[string]interface{}, value interface{}, keys ...string) error {
+	if len(keys) == 0 {
+		return fmt.Errorf("no keys provided")
+	}
+
+	if len(keys) == 1 {
+		m[keys[0]] = value
+		return nil
+	}
+
+	key := keys[0]
+	restKeys := keys[1:]
+
+	if _, exists := m[key]; !exists {
+		m[key] = make(map[string]interface{})
+	}
+
+	subMap, ok := m[key].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("value at key %s is not a map", key)
+	}
+
+	return SetNestedValue(subMap, value, restKeys...)
 }

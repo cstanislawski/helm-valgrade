@@ -21,6 +21,13 @@ type Chart struct {
 func Fetch(repository, name, version string, actionConfig *action.Configuration) (*Chart, error) {
 	settings := cli.New()
 
+	if actionConfig == nil {
+		actionConfig = new(action.Configuration)
+		if err := actionConfig.Init(settings.RESTClientGetter(), settings.Namespace(), os.Getenv("HELM_DRIVER"), logf); err != nil {
+			return nil, fmt.Errorf("failed to initialize action configuration: %w", err)
+		}
+	}
+
 	client := action.NewInstall(actionConfig)
 	client.ChartPathOptions.RepoURL = repository
 	client.ChartPathOptions.Version = version
@@ -95,4 +102,8 @@ func UpdateRepository(name, url string, settings *cli.EnvSettings) error {
 	}
 
 	return nil
+}
+
+func logf(format string, v ...interface{}) {
+	fmt.Printf(format, v...)
 }
