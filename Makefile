@@ -12,7 +12,7 @@ VERSION := $(shell awk '/version:/ {print $$2}' plugin.yaml | tr -d '"')
 all: test build
 
 build:
-	CGO_ENABLED=0 GOOS=linux $(GOBUILD) -ldflags="-s -w" -o $(BINARY_NAME) -v ./cmd/valgrade
+	CGO_ENABLED=0 $(GOBUILD) -ldflags="-s -w" -o $(BINARY_NAME) -v ./cmd/valgrade
 
 build-all:
 	GOOS=darwin GOARCH=amd64 $(GOBUILD) -ldflags="-s -w" -o $(BINARY_NAME)-darwin-amd64 -v ./cmd/valgrade
