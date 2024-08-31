@@ -3,6 +3,7 @@ package diff
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cstanislawski/helm-valgrade/internal/chart"
 )
@@ -99,9 +100,21 @@ func compareValues(prefix string, base, target, userChanges map[string]interface
 
 		switch typedV := v.(type) {
 		case map[string]interface{}:
-			err := compareValues(path, baseVal.(map[string]interface{}), typedV, userChanges, keepValues, ignoreMissing, result)
-			if err != nil {
-				return err
+			if baseMap, ok := baseVal.(map[string]interface{}); ok {
+				err := compareValues(path, baseMap, typedV, userChanges, keepValues, ignoreMissing, result)
+				if err != nil {
+					return err
+				}
+			} else {
+				result.Modified[path] = v
+			}
+		case []interface{}:
+			if baseSlice, ok := baseVal.([]interface{}); ok {
+				if !reflect.DeepEqual(typedV, baseSlice) {
+					result.Modified[path] = v
+				}
+			} else {
+				result.Modified[path] = v
 			}
 		default:
 			if !reflect.DeepEqual(v, baseVal) {
@@ -140,7 +153,7 @@ func joinPath(prefix, key string) string {
 
 func shouldKeep(path string, keepValues []string) bool {
 	for _, keep := range keepValues {
-		if path == keep || (len(path) > len(keep) && path[:len(keep)] == keep && path[len(keep)] == '.') {
+		if path == keep || strings.HasPrefix(path, keep+".") {
 			return true
 		}
 	}

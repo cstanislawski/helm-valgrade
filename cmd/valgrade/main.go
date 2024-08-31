@@ -127,13 +127,13 @@ func applyUpgrades(diffResult *diff.Result, userValues *yaml.Node) (*yaml.Node, 
 	var errors []error
 
 	for k, v := range diffResult.Added {
-		if err := values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...); err != nil {
+		if err := values.SetValue(userValues, v, strings.Split(k, ".")...); err != nil {
 			errors = append(errors, fmt.Errorf("failed to set added value %s: %w", k, err))
 		}
 	}
 
 	for k, v := range diffResult.Modified {
-		if err := values.SetValue(userValues, fmt.Sprintf("%v", v), strings.Split(k, ".")...); err != nil {
+		if err := values.SetValue(userValues, v, strings.Split(k, ".")...); err != nil {
 			errors = append(errors, fmt.Errorf("failed to set modified value %s: %w", k, err))
 		}
 	}
