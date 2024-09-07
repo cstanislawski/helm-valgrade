@@ -8,140 +8,114 @@ import (
 	"github.com/cstanislawski/helm-valgrade/internal/chart"
 )
 
-type Result struct {
+type Diff struct {
 	Added    map[string]interface{}
 	Removed  map[string]interface{}
 	Modified map[string]interface{}
 }
 
-func Compare(base, target *chart.Chart, userValues map[string]interface{}, keepValues []string, ignoreMissing bool) (*Result, error) {
-	result := &Result{
+func Compare(base, target *chart.Chart, userValues map[string]interface{}, keepValues []string, ignoreMissing bool) (*Diff, error) {
+	userValuesDiff, err := compareValues("", base.NormalizedValues, userValues, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare user values: %w", err)
+	}
+
+	if keepValues != nil {
+		mergeUserChangesKeepValues(userValuesDiff, base.NormalizedValues, keepValues)
+	}
+
+	baseValuesDiff, err := compareValues("", base.NormalizedValues, target.NormalizedValues, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare base values: %w", err)
+	}
+
+	if ignoreMissing && len(baseValuesDiff.Removed) > 0 {
+		removeMissingKeys(baseValuesDiff.Removed, userValuesDiff)
+	}
+
+	return userValuesDiff, nil
+}
+
+func compareValues(prefix string, base, compare map[string]interface{}, isUserValues bool) (*Diff, error) {
+	diff := &Diff{
 		Added:    make(map[string]interface{}),
 		Removed:  make(map[string]interface{}),
 		Modified: make(map[string]interface{}),
 	}
 
-	baseValues := base.GetDefaultValues()
-	targetValues := target.GetDefaultValues()
+	for key, baseValue := range base {
+		path := joinPath(prefix, key)
+		compareValue, exists := compare[key]
 
-	userChanges := identifyUserChanges("", baseValues, userValues)
-
-	err := compareValues("", baseValues, targetValues, userChanges, keepValues, ignoreMissing, result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compare values: %w", err)
-	}
-
-	cleanupEmptyMaps(result)
-
-	return result, nil
-}
-
-func identifyUserChanges(prefix string, base, user map[string]interface{}) map[string]interface{} {
-	changes := make(map[string]interface{})
-
-	for k, v := range user {
-		path := joinPath(prefix, k)
-		baseVal, baseExists := base[k]
-
-		if !baseExists {
-			changes[path] = v
-			continue
-		}
-
-		if reflect.TypeOf(v) != reflect.TypeOf(baseVal) {
-			changes[path] = v
-			continue
-		}
-
-		switch typedV := v.(type) {
-		case map[string]interface{}:
-			subChanges := identifyUserChanges(path, baseVal.(map[string]interface{}), typedV)
-			for subK, subV := range subChanges {
-				changes[subK] = subV
-			}
-		default:
-			if !reflect.DeepEqual(v, baseVal) {
-				changes[path] = v
-			}
-		}
-	}
-
-	return changes
-}
-
-func compareValues(prefix string, base, target, userChanges map[string]interface{}, keepValues []string, ignoreMissing bool, result *Result) error {
-	for k, v := range target {
-		path := joinPath(prefix, k)
-
-		if shouldKeep(path, keepValues) {
-			continue
-		}
-
-		baseVal, baseExists := base[k]
-		userVal, userChanged := userChanges[path]
-
-		if !baseExists {
-			if userChanged {
-				result.Added[path] = userVal
-			} else {
-				result.Added[path] = v
+		if !exists {
+			if !isUserValues {
+				diff.Removed[path] = baseValue
 			}
 			continue
 		}
 
-		if reflect.TypeOf(v) != reflect.TypeOf(baseVal) {
-			if userChanged {
-				result.Modified[path] = userVal
-			} else {
-				result.Modified[path] = v
-			}
-			continue
-		}
-
-		switch typedV := v.(type) {
-		case map[string]interface{}:
-			if baseMap, ok := baseVal.(map[string]interface{}); ok {
-				err := compareValues(path, baseMap, typedV, userChanges, keepValues, ignoreMissing, result)
-				if err != nil {
-					return err
-				}
-			} else {
-				result.Modified[path] = v
-			}
-		case []interface{}:
-			if baseSlice, ok := baseVal.([]interface{}); ok {
-				if !reflect.DeepEqual(typedV, baseSlice) {
-					result.Modified[path] = v
-				}
-			} else {
-				result.Modified[path] = v
-			}
-		default:
-			if !reflect.DeepEqual(v, baseVal) {
-				if userChanged {
-					result.Modified[path] = userVal
+		if !reflect.DeepEqual(baseValue, compareValue) {
+			switch baseTyped := baseValue.(type) {
+			case map[string]interface{}:
+				if compareTyped, ok := compareValue.(map[string]interface{}); ok {
+					subDiff, err := compareValues(path, baseTyped, compareTyped, isUserValues)
+					if err != nil {
+						return nil, fmt.Errorf("error comparing nested map at %s: %w", path, err)
+					}
+					mergeDiffs(diff, subDiff)
 				} else {
-					result.Modified[path] = v
+					diff.Modified[path] = compareValue
 				}
+			default:
+				diff.Modified[path] = compareValue
 			}
 		}
 	}
 
-	if !ignoreMissing {
-		for k, v := range base {
-			path := joinPath(prefix, k)
-
-			if shouldKeep(path, keepValues) {
-				continue
-			}
-
-			if _, exists := target[k]; !exists {
-				result.Removed[path] = v
-			}
+	for key, compareValue := range compare {
+		if _, exists := base[key]; !exists {
+			path := joinPath(prefix, key)
+			diff.Added[path] = compareValue
 		}
 	}
 
-	return nil
+	return diff, nil
+}
+
+func mergeUserChangesKeepValues(userDiff *Diff, baseValues map[string]interface{}, keepValues []string) {
+	addKeepValuesToModified(userDiff, baseValues, keepValues, "")
+
+	for k := range userDiff.Removed {
+		if shouldKeep(k, keepValues) {
+			delete(userDiff.Removed, k)
+		}
+	}
+}
+
+func addKeepValuesToModified(diff *Diff, values map[string]interface{}, keepValues []string, prefix string) {
+	for k, v := range values {
+		path := joinPath(prefix, k)
+		if shouldKeep(path, keepValues) {
+			if _, exists := diff.Modified[path]; !exists {
+				diff.Modified[path] = v
+			}
+		}
+		if nestedMap, ok := v.(map[string]interface{}); ok {
+			addKeepValuesToModified(diff, nestedMap, keepValues, path)
+		}
+	}
+}
+
+func mergeDiffs(main, sub *Diff) {
+	for k, v := range sub.Added {
+		main.Added[k] = v
+	}
+	for k, v := range sub.Removed {
+		main.Removed[k] = v
+	}
+	for k, v := range sub.Modified {
+		main.Modified[k] = v
+	}
 }
 
 func joinPath(prefix, key string) string {
@@ -160,14 +134,52 @@ func shouldKeep(path string, keepValues []string) bool {
 	return false
 }
 
-func cleanupEmptyMaps(result *Result) {
-	if len(result.Added) == 0 {
-		result.Added = nil
+func PrintDiff(baseValuesDiff, userValuesDiff *Diff) {
+	fmt.Println("Differences between base old version and target version:")
+	printDiffSection(baseValuesDiff)
+
+	fmt.Println("\nDifferences between base old version and user values:")
+	printDiffSection(userValuesDiff)
+}
+
+func printDiffSection(diff *Diff) {
+	if len(diff.Added) > 0 {
+		fmt.Println("  Added:")
+		for k, v := range diff.Added {
+			fmt.Printf("    %s: %v\n", k, v)
+		}
 	}
-	if len(result.Removed) == 0 {
-		result.Removed = nil
+
+	if len(diff.Removed) > 0 {
+		fmt.Println("  Removed:")
+		for k := range diff.Removed {
+			fmt.Printf("    %s\n", k)
+		}
 	}
-	if len(result.Modified) == 0 {
-		result.Modified = nil
+
+	if len(diff.Modified) > 0 {
+		fmt.Println("  Modified:")
+		for k, v := range diff.Modified {
+			fmt.Printf("    %s: %v\n", k, v)
+		}
+	}
+
+	if len(diff.Added) == 0 && len(diff.Removed) == 0 && len(diff.Modified) == 0 {
+		fmt.Println("  No differences found.")
+	}
+}
+
+func removeMissingKeys(removedKeys map[string]interface{}, userValuesDiff *Diff) {
+	for key := range removedKeys {
+		removeKeyAndChildren(key, userValuesDiff.Added)
+		removeKeyAndChildren(key, userValuesDiff.Modified)
+	}
+}
+
+func removeKeyAndChildren(key string, diffMap map[string]interface{}) {
+	for diffKey := range diffMap {
+		if strings.HasPrefix(diffKey, key) || diffKey == key {
+			delete(diffMap, diffKey)
+		}
 	}
 }

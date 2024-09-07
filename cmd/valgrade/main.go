@@ -31,10 +31,10 @@ func main() {
 
 	errors := run(cfg)
 	if len(errors) > 0 {
-		log.Error().Msg("Failed to execute valgrade")
 		for _, err := range errors {
 			log.Error().Msgf("%v", err)
 		}
+		log.Error().Msg("Failed to execute valgrade")
 		os.Exit(1)
 	}
 
@@ -56,6 +56,8 @@ func run(cfg *config.Config) []error {
 		return errors
 	}
 
+	targetValues := targetChart.GetDefaultValuesYamlNode()
+
 	userValues, err := values.Load(cfg.ValuesFile)
 	if err != nil {
 		errors = append(errors, fmt.Errorf("failed to load user values: %w", err))
@@ -74,7 +76,7 @@ func run(cfg *config.Config) []error {
 		return errors
 	}
 
-	upgradedValues, upgradeErrors := applyUpgrades(diffResult, userValues)
+	upgradedValues, upgradeErrors := applyUpgrades(diffResult, targetValues)
 	if len(upgradeErrors) > 0 {
 		for _, err := range upgradeErrors {
 			errors = append(errors, fmt.Errorf("failed to apply upgrades: %w", err))
@@ -123,23 +125,23 @@ func getLogLevel(level string) zerolog.Level {
 	}
 }
 
-func applyUpgrades(diffResult *diff.Result, userValues *yaml.Node) (*yaml.Node, []error) {
+func applyUpgrades(diffResult *diff.Diff, targetValues *yaml.Node) (*yaml.Node, []error) {
 	var errors []error
 
 	for k, v := range diffResult.Added {
-		if err := values.SetValue(userValues, v, strings.Split(k, ".")...); err != nil {
+		if err := values.SetValue(targetValues, v, strings.Split(k, ".")...); err != nil {
 			errors = append(errors, fmt.Errorf("failed to set added value %s: %w", k, err))
 		}
 	}
 
 	for k, v := range diffResult.Modified {
-		if err := values.SetValue(userValues, v, strings.Split(k, ".")...); err != nil {
+		if err := values.SetValue(targetValues, v, strings.Split(k, ".")...); err != nil {
 			errors = append(errors, fmt.Errorf("failed to set modified value %s: %w", k, err))
 		}
 	}
 
 	for k := range diffResult.Removed {
-		if err := values.DeleteValue(userValues, strings.Split(k, ".")...); err != nil {
+		if err := values.DeleteValue(targetValues, strings.Split(k, ".")...); err != nil {
 			errors = append(errors, fmt.Errorf("failed to delete removed value %s: %w", k, err))
 		}
 	}
@@ -148,7 +150,7 @@ func applyUpgrades(diffResult *diff.Result, userValues *yaml.Node) (*yaml.Node, 
 		return nil, errors
 	}
 
-	return userValues, nil
+	return targetValues, nil
 }
 
 func printUpgradedValues(upgradedValues *yaml.Node) error {
