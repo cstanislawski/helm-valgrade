@@ -56,7 +56,11 @@ func run(cfg *config.Config) []error {
 		return errors
 	}
 
-	targetValues := targetChart.GetDefaultValuesYamlNode()
+	targetValues, err := targetChart.GetDefaultValuesYamlNode()
+	if err != nil {
+		errors = append(errors, fmt.Errorf("failed to get target values: %w", err))
+		return errors
+	}
 
 	userValues, err := values.Load(cfg.ValuesFile)
 	if err != nil {

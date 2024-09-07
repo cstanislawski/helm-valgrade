@@ -66,19 +66,18 @@ func (c *Chart) GetDefaultValues() map[string]interface{} {
 	return c.Values
 }
 
-func (c *Chart) GetDefaultValuesYamlNode() *yaml.Node {
-	data, err := yaml.Marshal(c.Values)
-	if err != nil {
-		return nil
+func (c *Chart) GetDefaultValuesYamlNode() (*yaml.Node, error) {
+	for _, file := range c.Raw {
+		if strings.HasSuffix(file.Name, "values.yaml") {
+			var node yaml.Node
+			err := yaml.Unmarshal(file.Data, &node)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal values.yaml: %w", err)
+			}
+			return &node, nil
+		}
 	}
-
-	var node yaml.Node
-	err = yaml.Unmarshal(data, &node)
-	if err != nil {
-		return nil
-	}
-
-	return &node
+	return nil, fmt.Errorf("values.yaml not found in chart")
 }
 
 func normalizeValues(m map[string]interface{}) map[string]interface{} {
