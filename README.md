@@ -4,6 +4,10 @@ a helm plugin that carries over the changes made to the base values file to the 
 
 inspired by: [databus23/helm-diff](https://github.com/databus23/helm-diff)
 
+## status
+
+the plugin is not production-ready and I advise against using it in the current state
+
 ## installation
 
 ```bash
