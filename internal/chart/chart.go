@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"gopkg.in/yaml.v3"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -16,6 +17,7 @@ import (
 
 type Chart struct {
 	*chart.Chart
+	NormalizedValues map[string]interface{}
 }
 
 func Fetch(repository, name, version string, actionConfig *action.Configuration) (*Chart, error) {
@@ -52,11 +54,56 @@ func Fetch(repository, name, version string, actionConfig *action.Configuration)
 		return nil, fmt.Errorf("failed to load chart: %w", err)
 	}
 
-	return &Chart{Chart: loadedChart}, nil
+	normalizedValues := normalizeValues(loadedChart.Values)
+
+	return &Chart{
+		Chart:            loadedChart,
+		NormalizedValues: normalizedValues,
+	}, nil
 }
 
 func (c *Chart) GetDefaultValues() map[string]interface{} {
 	return c.Values
+}
+
+func (c *Chart) GetDefaultValuesYamlNode() (*yaml.Node, error) {
+	for _, file := range c.Raw {
+		if strings.HasSuffix(file.Name, "values.yaml") {
+			var node yaml.Node
+			err := yaml.Unmarshal(file.Data, &node)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal values.yaml: %w", err)
+			}
+			return &node, nil
+		}
+	}
+	return nil, fmt.Errorf("values.yaml not found in chart")
+}
+
+func normalizeValues(m map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	for k, v := range m {
+		result[k] = normalizeValue(v)
+	}
+	return result
+}
+
+func normalizeValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case float64:
+		if val == float64(int(val)) {
+			return int(val)
+		}
+	case []interface{}:
+		normalized := make([]interface{}, len(val))
+		for i, item := range val {
+			normalized[i] = normalizeValue(item)
+		}
+		return normalized
+	case map[string]interface{}:
+		return normalizeValues(val)
+	}
+	return v
 }
 
 func (c *Chart) GetSchema() []byte {

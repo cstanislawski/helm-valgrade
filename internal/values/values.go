@@ -39,9 +39,9 @@ func Write(filename string, node *yaml.Node) error {
 	return nil
 }
 
-func GetValue(node *yaml.Node, keys ...string) (string, error) {
+func GetValue(node *yaml.Node, keys ...string) (*yaml.Node, error) {
 	if node.Kind != yaml.DocumentNode {
-		return "", fmt.Errorf("expected document node")
+		return nil, fmt.Errorf("expected document node")
 	}
 
 	current := node.Content[0]
@@ -55,14 +55,14 @@ func GetValue(node *yaml.Node, keys ...string) (string, error) {
 			}
 		}
 		if !found {
-			return "", fmt.Errorf("key not found: %s", key)
+			return nil, fmt.Errorf("key not found: %s", key)
 		}
 	}
 
-	return current.Value, nil
+	return current, nil
 }
 
-func SetValue(node *yaml.Node, newValue string, keys ...string) error {
+func SetValue(node *yaml.Node, newValue interface{}, keys ...string) error {
 	if node.Kind != yaml.DocumentNode {
 		return fmt.Errorf("expected document node")
 	}
@@ -91,13 +91,32 @@ func SetValue(node *yaml.Node, newValue string, keys ...string) error {
 	lastKey := keys[len(keys)-1]
 	for i := 0; i < len(current.Content); i += 2 {
 		if current.Content[i].Value == lastKey {
-			current.Content[i+1].Value = newValue
+			current.Content[i+1] = interfaceToNode(newValue)
 			return nil
 		}
 	}
 
-	current.Content = append(current.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: lastKey}, &yaml.Node{Kind: yaml.ScalarNode, Value: newValue})
+	current.Content = append(current.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: lastKey}, interfaceToNode(newValue))
 	return nil
+}
+
+func interfaceToNode(v interface{}) *yaml.Node {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		n := &yaml.Node{Kind: yaml.MappingNode}
+		for k, v := range val {
+			n.Content = append(n.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: k}, interfaceToNode(v))
+		}
+		return n
+	case []interface{}:
+		n := &yaml.Node{Kind: yaml.SequenceNode}
+		for _, v := range val {
+			n.Content = append(n.Content, interfaceToNode(v))
+		}
+		return n
+	default:
+		return &yaml.Node{Kind: yaml.ScalarNode, Value: fmt.Sprintf("%v", v)}
+	}
 }
 
 func DeleteValue(node *yaml.Node, keys ...string) error {
@@ -129,29 +148,4 @@ func DeleteValue(node *yaml.Node, keys ...string) error {
 	}
 
 	return fmt.Errorf("key not found: %s", lastKey)
-}
-
-func SetNestedValue(m map[string]interface{}, value interface{}, keys ...string) error {
-	if len(keys) == 0 {
-		return fmt.Errorf("no keys provided")
-	}
-
-	if len(keys) == 1 {
-		m[keys[0]] = value
-		return nil
-	}
-
-	key := keys[0]
-	restKeys := keys[1:]
-
-	if _, exists := m[key]; !exists {
-		m[key] = make(map[string]interface{})
-	}
-
-	subMap, ok := m[key].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("value at key %s is not a map", key)
-	}
-
-	return SetNestedValue(subMap, value, restKeys...)
 }

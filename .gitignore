@@ -1,3 +1,5 @@
 helm-valgrade
 bin
 .idea
+.vscode
+__debug_bin*
