@@ -17,35 +17,35 @@ func TestCompare(t *testing.T) {
 		user          map[string]interface{}
 		keepValues    []string
 		ignoreMissing bool
-		expected      Result
+		expected      Diff
 	}{
 		{
 			name:     "Simple addition",
 			base:     map[string]interface{}{"a": 1},
 			target:   map[string]interface{}{"a": 1, "b": 2},
 			user:     map[string]interface{}{},
-			expected: Result{Added: map[string]interface{}{"b": 2}},
+			expected: Diff{Added: map[string]interface{}{"b": 2}},
 		},
 		{
 			name:     "Simple removal",
 			base:     map[string]interface{}{"a": 1, "b": 2},
 			target:   map[string]interface{}{"a": 1},
 			user:     map[string]interface{}{},
-			expected: Result{Removed: map[string]interface{}{"b": 2}},
+			expected: Diff{Removed: map[string]interface{}{"b": 2}},
 		},
 		{
 			name:     "Simple modification",
 			base:     map[string]interface{}{"a": 1},
 			target:   map[string]interface{}{"a": 2},
 			user:     map[string]interface{}{},
-			expected: Result{Modified: map[string]interface{}{"a": 2}},
+			expected: Diff{Modified: map[string]interface{}{"a": 2}},
 		},
 		{
 			name:   "Nested changes",
 			base:   map[string]interface{}{"a": map[string]interface{}{"b": 1, "c": 2}},
 			target: map[string]interface{}{"a": map[string]interface{}{"b": 1, "c": 3, "d": 4}},
 			user:   map[string]interface{}{},
-			expected: Result{
+			expected: Diff{
 				Added:    map[string]interface{}{"a.d": 4},
 				Modified: map[string]interface{}{"a.c": 3},
 			},
@@ -56,7 +56,7 @@ func TestCompare(t *testing.T) {
 			target:     map[string]interface{}{"a": 2, "b": 3},
 			user:       map[string]interface{}{},
 			keepValues: []string{"a"},
-			expected:   Result{Modified: map[string]interface{}{"b": 3}},
+			expected:   Diff{Modified: map[string]interface{}{"b": 3}},
 		},
 		{
 			name:          "Ignore missing",
@@ -64,21 +64,21 @@ func TestCompare(t *testing.T) {
 			target:        map[string]interface{}{"a": 1},
 			user:          map[string]interface{}{},
 			ignoreMissing: true,
-			expected:      Result{},
+			expected:      Diff{},
 		},
 		{
 			name:     "User values",
 			base:     map[string]interface{}{"a": 1},
 			target:   map[string]interface{}{"a": 2},
 			user:     map[string]interface{}{"a": 3},
-			expected: Result{Modified: map[string]interface{}{"a": 3}},
+			expected: Diff{Modified: map[string]interface{}{"a": 3}},
 		},
 		{
 			name:   "Complex nested changes with ignore missing",
 			base:   map[string]interface{}{"a": map[string]interface{}{"b": 1, "c": 2, "d": 3}, "e": 4},
 			target: map[string]interface{}{"a": map[string]interface{}{"b": 1, "c": 3, "f": 5}, "g": 6},
 			user:   map[string]interface{}{"a": map[string]interface{}{"c": 4}},
-			expected: Result{
+			expected: Diff{
 				Added:    map[string]interface{}{"a.f": 5, "g": 6},
 				Modified: map[string]interface{}{"a.c": 4},
 			},
@@ -90,7 +90,7 @@ func TestCompare(t *testing.T) {
 			target:     map[string]interface{}{"a": map[string]interface{}{"b": 2, "c": 3}, "d": 4},
 			user:       map[string]interface{}{},
 			keepValues: []string{"a.b"},
-			expected: Result{
+			expected: Diff{
 				Modified: map[string]interface{}{"a.c": 3, "d": 4},
 			},
 		},
@@ -101,14 +101,14 @@ func TestCompare(t *testing.T) {
 			baseChart := createMockChart(tt.base)
 			targetChart := createMockChart(tt.target)
 
-			result, err := Compare(baseChart, targetChart, tt.user, tt.keepValues, tt.ignoreMissing)
+			diff, err := Compare(baseChart, targetChart, tt.user, tt.keepValues, tt.ignoreMissing)
 			if err != nil {
 				t.Fatalf("Compare returned an error: %v", err)
 			}
 
-			if !resultEqual(*result, tt.expected) {
-				t.Errorf("Compare result mismatch for test case %s.\nExpected: %+v\nGot: %+v\nDetailed comparison:\n%s",
-					tt.name, tt.expected, *result, detailedComparison(*result, tt.expected))
+			if !diffEqual(*diff, tt.expected) {
+				t.Errorf("Compare diff mismatch for test case %s.\nExpected: %+v\nGot: %+v\nDetailed comparison:\n%s",
+					tt.name, tt.expected, *diff, detailedComparison(*diff, tt.expected))
 			}
 		})
 	}
@@ -122,13 +122,13 @@ func createMockChart(values map[string]interface{}) *chart.Chart {
 	}
 }
 
-func resultEqual(a, b Result) bool {
+func diffEqual(a, b Diff) bool {
 	return reflect.DeepEqual(a.Added, b.Added) &&
 		reflect.DeepEqual(a.Removed, b.Removed) &&
 		reflect.DeepEqual(a.Modified, b.Modified)
 }
 
-func detailedComparison(got, expected Result) string {
+func detailedComparison(got, expected Diff) string {
 	details := "Detailed comparison:\n"
 	details += compareMap("Added", got.Added, expected.Added)
 	details += compareMap("Removed", got.Removed, expected.Removed)
@@ -193,9 +193,9 @@ func TestShouldKeep(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			result := shouldKeep(tt.path, tt.keepValues)
-			if result != tt.expected {
-				t.Errorf("shouldKeep(%q, %v) = %v, want %v", tt.path, tt.keepValues, result, tt.expected)
+			diff := shouldKeep(tt.path, tt.keepValues)
+			if diff != tt.expected {
+				t.Errorf("shouldKeep(%q, %v) = %v, want %v", tt.path, tt.keepValues, diff, tt.expected)
 			}
 		})
 	}
@@ -216,9 +216,9 @@ func TestJoinPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s+%s", tt.prefix, tt.key), func(t *testing.T) {
-			result := joinPath(tt.prefix, tt.key)
-			if result != tt.expected {
-				t.Errorf("joinPath(%q, %q) = %q, want %q", tt.prefix, tt.key, result, tt.expected)
+			diff := joinPath(tt.prefix, tt.key)
+			if diff != tt.expected {
+				t.Errorf("joinPath(%q, %q) = %q, want %q", tt.prefix, tt.key, diff, tt.expected)
 			}
 		})
 	}
